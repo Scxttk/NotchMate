@@ -66,6 +66,77 @@ final class WaveHandoverTests: XCTestCase {
                        "the scaled page run must land within a bar of the pill's width")
     }
 
+    /// `morphScale` is not decoration: the travelling run is *always* built at
+    /// page geometry (`NotchRootView.morphingWave`), and shrinking it is the only
+    /// thing that makes it the pill's. So every branch of `WaveBarsView` has to
+    /// honour it — the procedural fallback included.
+    ///
+    /// It did not. The scale sat inside the live-bands branch, so a run with no
+    /// tap data behind it drew at full page size inside the collapsed capsule and
+    /// was clipped by it. Not a corner case: waking the Mac while Spotify reports
+    /// playback from another device (Connect) is exactly that state — a player
+    /// says "playing", the tap has nothing, the wave falls back to its loop.
+    ///
+    /// Measured as a ratio of two renders rather than against an absolute width,
+    /// so the bars' glow — which spills past the run and scales with it — cancels
+    /// out instead of needing a fudge factor.
+    @MainActor
+    func testTheProceduralFallbackShrinksIntoThePillToo() throws {
+        let pill = NotchLayout.pillSpectrumGeometry(forWidth: UserSettings.shared.pillSpectrumWidth)
+        let page = NotchLayout.spectrumPageWaveGeometry(barCount: pill.barCount)
+        let scale = NotchLayout.pillToPageWaveScale
+
+        for (name, bands) in [("procedural", nil), ("live", Array(repeating: CGFloat(0.6), count: pill.barCount))] as [(String, [CGFloat]?)] {
+            let full = try litWidth(of: page, bands: bands, morphScale: 1)
+            let shrunk = try litWidth(of: page, bands: bands, morphScale: scale)
+
+            XCTAssertGreaterThan(full, 0, "the \(name) run must draw something to measure")
+            XCTAssertEqual(shrunk / full, scale, accuracy: 0.06,
+                           "the \(name) run must shrink by exactly the pill⇄page scale; "
+                           + "a branch that ignores morphScale draws the page's wave inside the pill")
+        }
+    }
+
+    /// Width of the lit part of a rendered run, in points — the wave against the
+    /// island's black, measured rather than assumed.
+    @MainActor
+    private func litWidth(of geometry: NotchLayout.PillSpectrumGeometry,
+                          bands: [CGFloat]?,
+                          morphScale: CGFloat) throws -> CGFloat {
+        // `isActive: false` freezes the procedural branch's timeline at its
+        // resting frame, so the measurement doesn't depend on when it ran.
+        let wave = WaveBarsView(
+            isActive: false,
+            tint: .white,
+            bands: bands,
+            count: geometry.barCount,
+            maxHeight: geometry.waveHeight,
+            barWidth: geometry.barWidth,
+            spacing: geometry.spacing,
+            morphScale: morphScale
+        )
+        .frame(width: geometry.runWidth, height: geometry.frameHeight)
+        .background(Color.black)
+
+        let renderer = ImageRenderer(content: wave)
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.cgImage, "the run failed to render")
+        let rep = NSBitmapImageRep(cgImage: image)
+
+        var minX = image.width, maxX = -1
+        for y in stride(from: 0, to: image.height, by: 2) {
+            for x in 0..<image.width where minX > x || maxX < x {
+                guard let color = rep.colorAt(x: x, y: y) else { continue }
+                // Anything above the black background counts as bar or glow.
+                guard color.brightnessComponent > 0.06 else { continue }
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+            }
+        }
+        guard maxX >= minX else { return 0 }
+        return CGFloat(maxX - minX + 1) / renderer.scale
+    }
+
     /// The run stands in for the spectrum page while the carousel slides, so it
     /// has to travel exactly as far as that page does — one page width per tab
     /// of separation, in the same direction.

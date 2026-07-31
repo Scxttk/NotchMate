@@ -347,8 +347,23 @@ struct WaveBarsView: View {
         WaveCanvas(levels: BarLevels(values: levels), inks: inks, metrics: metrics)
     }
 
-    @ViewBuilder
     var body: some View {
+        // The morph transform sits *outside* the live/procedural branch, and has
+        // to: `morphScale` is how a run drawn at page geometry becomes the pill's,
+        // so a branch that skips it draws the page's wave at full size inside the
+        // capsule — the pill⇄page scale is under 0.5 (see `WaveHandoverTests`), so
+        // that is the whole spectrum page crammed into the pill and clipped by it.
+        // Which is exactly what the fallback did: waking the Mac with Spotify
+        // reporting playback from another device (Connect) leaves the tap with no
+        // signal, the run falls back to the procedural loop, and the pill filled
+        // with a wave twice the size it had room for.
+        run
+            .scaleEffect(morphScale)
+            .animation(morphAnimation, value: morphScale)
+    }
+
+    @ViewBuilder
+    private var run: some View {
         if let bands, !bands.isEmpty {
             // Real spectrum: bar height follows each band, eased between
             // updates so the wave flows instead of stepping.
@@ -367,16 +382,14 @@ struct WaveBarsView: View {
             // to crossfade over 0.4s when the cover changed; a canvas can't
             // interpolate them, so a new palette now takes effect at once.
             let values = fitted(bands)
+            // The pill⇄page morph is applied above, as a transform rather than a
+            // redraw: the two ends are the same wave at two scales, so scaling
+            // *is* the interpolation — and unlike animating the canvas's
+            // geometry it cannot be restarted by this levels ease, which is what
+            // kept the morph from ever being visible.
             wave(levels: values, inks: palette(total: values.count))
                 .frame(maxHeight: .infinity, alignment: .center)
                 .animation(power.isOnBattery ? nil : .easeOut(duration: 0.09), value: values)
-                // The pill⇄page morph, as a transform rather than a redraw: the
-                // two ends are the same wave at two scales, so scaling *is* the
-                // interpolation — and unlike animating the canvas's geometry it
-                // cannot be restarted by the levels' ease, which is what kept
-                // the morph from ever being visible.
-                .scaleEffect(morphScale)
-                .animation(morphAnimation, value: morphScale)
         } else {
             // Hoisted out of the timeline closure on purpose: the colours don't
             // depend on the clock, so they're resolved once per update instead
