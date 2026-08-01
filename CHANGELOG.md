@@ -5,6 +5,15 @@ bundle identifier still is NotchMate, see the README for why).
 
 ## [Unreleased]
 
+### Added
+- **⌥⌘N pauses the notch.** The panel hides and becomes fully click-through,
+  so the exact spot it occupies can be hovered and clicked — until now the
+  only way to reach something living under the notch was quitting the app.
+  Also in the status menu ("Notch pausieren", with a checkmark, the menu-bar
+  icon hollows out while paused). While paused, nothing wakes it — hover,
+  swipe, file drags and ⌥⌘Space are all inert; ⌥⌘N brings it back. Not
+  persisted: a fresh launch always starts with the notch on.
+
 ### Changed
 - **The fullscreen guard is ⌥⌘S only.** 1.5 shipped it as a screen saver as
   well: an untouched Mac with something playing had the screen taken from it

@@ -25,6 +25,10 @@ struct PanelPresencePolicy: Equatable {
         /// Nothing to show: no audio hero, no timer, no activity, no drag —
         /// and the cursor isn't near the notch.
         case idle
+        /// The user paused the notch (⌥⌘N or the status menu) to reach
+        /// whatever sits underneath it — previously that took quitting the app.
+        /// Session-only by design: a fresh launch always starts enabled.
+        case userDisabled
     }
 
     /// Reasons the panel stays visible but must not intercept mouse events.

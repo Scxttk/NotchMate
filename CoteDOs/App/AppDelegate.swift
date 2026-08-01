@@ -50,7 +50,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.show()
         windowController = controller
 
-        statusBarController = StatusBarController()
+        statusBarController = StatusBarController(onToggleNotch: { [weak self] in
+            self?.toggleNotchPaused() ?? false
+        })
+
+        // ⌥⌘N pauses/resumes the whole notch from anywhere. Born from needing
+        // to hover/click the exact spot the notch occupies — until now the only
+        // way there was quitting the app.
+        HotKeyCenter.shared.register(.notchToggle) { [weak self] in
+            guard let self else { return }
+            self.statusBarController?.setNotchPaused(self.toggleNotchPaused())
+        }
 
         enableLaunchAtLogin()
 
@@ -177,6 +187,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func screenParametersChanged() {
         windowController?.reposition()
+    }
+
+    /// Flip the notch pause and report the new state — the one toggle both
+    /// the global hotkey and the status menu go through.
+    private func toggleNotchPaused() -> Bool {
+        let disabled = !(windowController?.isUserDisabled ?? false)
+        windowController?.setUserDisabled(disabled)
+        return disabled
     }
 
     @objc private func resetData() {

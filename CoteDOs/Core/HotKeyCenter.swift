@@ -17,6 +17,7 @@ final class HotKeyCenter {
     enum Action: UInt32 {
         case quickCapture = 1
         case spectrumFullscreen = 2
+        case notchToggle = 3
 
         /// Each action's default combination, so the Carbon key codes stay in
         /// this file and call sites read as intent (`register(.spectrumFullscreen)`).
@@ -26,6 +27,8 @@ final class HotKeyCenter {
                 return (UInt32(kVK_Space), UInt32(cmdKey | optionKey))          // ⌥⌘Space
             case .spectrumFullscreen:
                 return (UInt32(kVK_ANSI_S), UInt32(cmdKey | optionKey))         // ⌥⌘S
+            case .notchToggle:
+                return (UInt32(kVK_ANSI_N), UInt32(cmdKey | optionKey))         // ⌥⌘N
             }
         }
     }

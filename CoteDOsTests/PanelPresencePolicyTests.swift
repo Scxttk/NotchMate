@@ -8,7 +8,9 @@ import XCTest
 final class PanelPresencePolicyTests: XCTestCase {
 
     private let allHideSets: [Set<PanelPresencePolicy.HideReason>] = [
-        [], [.idle], [.menuBarOverlap], [.idle, .menuBarOverlap],
+        [], [.idle], [.menuBarOverlap], [.userDisabled],
+        [.idle, .menuBarOverlap], [.idle, .userDisabled], [.menuBarOverlap, .userDisabled],
+        [.idle, .menuBarOverlap, .userDisabled],
     ]
     private let allPassiveSets: [Set<PanelPresencePolicy.PassiveReason>] = [
         [], [.safariFullscreen],
@@ -59,5 +61,16 @@ final class PanelPresencePolicyTests: XCTestCase {
         XCTAssertTrue(policy.isHidden, "lifting the overlap must not un-hide an idle panel")
         policy.hideReasons.remove(.idle)
         XCTAssertFalse(policy.isHidden)
+    }
+
+    func testUserPauseSurvivesTheIdleCycle() {
+        // While paused, the idle logic keeps inserting/removing `.idle` as
+        // music starts and stops — none of that may resurrect the panel.
+        var policy = PanelPresencePolicy(hideReasons: [.userDisabled])
+        policy.hideReasons.insert(.idle)
+        policy.hideReasons.remove(.idle)
+        XCTAssertTrue(policy.isHidden, "the user's pause must outlive any idle transition")
+        XCTAssertTrue(policy.ignoresMouseEvents(cursorInsideInteractiveRect: true, hotkeyOverride: true),
+                      "a paused panel never takes clicks, even hovered and hotkeyed")
     }
 }

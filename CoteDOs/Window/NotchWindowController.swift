@@ -51,6 +51,10 @@ final class NotchWindowController {
     /// panel is hidden and non-interactive for the duration (see
     /// `setMenuBarOverlap`).
     private var menuBarOverlapActive: Bool { policy.hideReasons.contains(.menuBarOverlap) }
+    /// True while the user has paused the notch (⌥⌘N / status menu) — hidden,
+    /// click-through, and every wake path (hover, gesture, drag, capture
+    /// hotkey) is inert until it is lifted again. See `setUserDisabled`.
+    var isUserDisabled: Bool { policy.hideReasons.contains(.userDisabled) }
     /// True while the capture hotkey holds the island open: the panel must be
     /// interactive regardless of where the cursor is (see
     /// `PanelPresencePolicy.ignoresMouseEvents`). Cleared on any collapse.
@@ -346,6 +350,10 @@ final class NotchWindowController {
     /// the global hotkey. The panel is non-activating, so we make it key
     /// explicitly so keystrokes reach the field.
     func presentCapture() {
+        // Paused means paused: the capture hotkey must not reopen an island
+        // the user explicitly put away (and a hidden panel could not take
+        // keystrokes anyway — `ignoresMouseEvents` stays true while hidden).
+        guard !isUserDisabled else { return }
         suppressHover = false
         collapseWorkItem?.cancel()
         // Hotkey from anywhere, including the idle-hidden state: un-hide first
@@ -599,6 +607,30 @@ final class NotchWindowController {
         )
     }
 
+    /// Pause or resume the whole notch on the user's say-so. Pausing
+    /// force-closes an open island and hides the panel; a hidden panel is
+    /// unconditionally click-through (`PanelPresencePolicy`), so the exact
+    /// spot the notch occupied becomes hoverable and clickable for whatever
+    /// sits underneath — the reason this exists. Resuming only lifts this one
+    /// reason; an idle or overlap hide stays in force.
+    func setUserDisabled(_ disabled: Bool) {
+        guard isUserDisabled != disabled else { return }
+        if disabled {
+            stageWorkItem?.cancel(); stageWorkItem = nil
+            stagingTarget = nil
+            collapseWorkItem?.cancel()
+            captureHotkeyActive = false
+            viewModel.islandState = .collapsed
+            policy.hideReasons.insert(.userDisabled)
+        } else {
+            policy.hideReasons.remove(.userDisabled)
+            // Coming back with nothing to show should land hidden-idle, not
+            // flash the empty pill under a cursor that isn't near it.
+            refreshIdlePresence(animated: false)
+        }
+        applyPresence(animated: false)
+    }
+
     /// Hide (and stop hit-testing) the panel while the frontmost app's menu
     /// bar overlaps the notch pill, and restore it once the overlap clears.
     /// An already-open island is forced closed first so it doesn't obscure
@@ -621,7 +653,7 @@ final class NotchWindowController {
     }
 
     private func evaluateHover(isDrag: Bool = false) {
-        guard !menuBarOverlapActive else { return }
+        guard !menuBarOverlapActive, !isUserDisabled else { return }
         let cursor = NSEvent.mouseLocation
         if let last = lastEvaluatedCursor, abs(last.x - cursor.x) < 1, abs(last.y - cursor.y) < 1 {
             return
@@ -729,7 +761,7 @@ final class NotchWindowController {
     // MARK: - File drag
 
     private func handleDragEntered() {
-        guard !menuBarOverlapActive, !isSafariDodged else { return }
+        guard !menuBarOverlapActive, !isSafariDodged, !isUserDisabled else { return }
         collapseWorkItem?.cancel()
         suppressHover = false
         // A drag reaching the hidden notch un-hides it — snap, the expand walk
@@ -838,7 +870,7 @@ final class NotchWindowController {
     /// expanded-notch footprint (the "big notch" boundary), where the local monitor
     /// can't see the event because hit-testing lets it fall through.
     private func handleBigNotchRegionScroll(_ event: NSEvent) {
-        guard !menuBarOverlapActive, !isSafariDodged, !viewModel.isExpanded else { return }
+        guard !menuBarOverlapActive, !isSafariDodged, !isUserDisabled, !viewModel.isExpanded else { return }
         let dy = event.scrollingDeltaY
         guard dy > 0, abs(dy) > NotchLayout.gestureScrollThreshold, abs(dy) > abs(event.scrollingDeltaX) else { return }
         guard let rect = islandScreenRect(expanded: true), rect.contains(NSEvent.mouseLocation) else { return }
