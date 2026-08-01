@@ -387,8 +387,8 @@
     },
     "settings.spectrum.hint" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. Die Farben der Balken kommen immer vom Album-Cover. Der Bildschirmschoner übernimmt den Bildschirm, kurz bevor der Mac das Display abschaltet — nur wenn gerade Ton läuft. Er hält den Bildschirm wach; sobald du etwas anfasst oder die Musik aus ist, sperrt der Mac." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "“Spectrum instead of the cover” swaps the mini cover in the collapsed notch for a wider spectrum with more bars — the music tab keeps its cover. The bars always take their colors from the album cover. The screen saver takes the screen shortly before the Mac would switch the display off, and only while something is audible. It keeps the screen awake; the moment you touch anything or the music stops, the Mac locks." } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. Die Farben der Balken kommen immer vom Album-Cover. Mit ⌥⌘S nimmt sich das Spektrum den ganzen Bildschirm und hält ihn wach; sobald du zurückkommst oder die Musik aus ist, sperrt der Mac." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "“Spectrum instead of the cover” swaps the mini cover in the collapsed notch for a wider spectrum with more bars — the music tab keeps its cover. The bars always take their colors from the album cover. ⌥⌘S hands the whole screen to the spectrum and keeps it awake; the moment you come back or the music stops, the Mac locks." } }
       }
     },
     "settings.spectrum.pillOnly" : {
@@ -401,12 +401,6 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Breite" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Width" } }
-      }
-    },
-    "settings.spectrum.screensaver" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Bildschirmschoner bei Untätigkeit" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use as a screen saver when idle" } }
       }
     },
     "settings.suppressOSD" : {

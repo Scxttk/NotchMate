@@ -20,9 +20,9 @@ final class SpectrumFullscreen: ObservableObject {
     @Published private(set) var isCollapsing = false
     /// Whether this takeover is *guarding* the Mac rather than just being
     /// looked at: armed, anything that ends it locks the machine behind it
-    /// (see `IdleSpectrumMonitor`). Set by the two ways of leaving a Mac
-    /// deliberately — the idle screensaver and the ⌥⌘S hotkey — and never by
-    /// the tap on the spectrum page, which happens while you sit in front of it.
+    /// (see `SpectrumGuard`). Set by the one way of leaving a Mac deliberately
+    /// — the ⌥⌘S hotkey — and never by the tap on the spectrum page, which
+    /// happens while you sit in front of it.
     ///
     /// Not `@Published`: it is read alongside `isPresented`, whose change is
     /// what anyone acting on this waits for anyway.

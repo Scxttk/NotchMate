@@ -31,11 +31,10 @@ struct NowPlayingSettings: View {
                         .frame(width: 44, alignment: .trailing)
                 }
                 .disabled(!settings.pillSpectrumOnly)
-                Toggle(String(localized: "settings.spectrum.screensaver", defaultValue: "Als Bildschirmschoner bei Untätigkeit"), isOn: $settings.spectrumScreensaverEnabled)
             } header: {
                 Text(String(localized: "settings.spectrum.header", defaultValue: "Sound-Spektrum"))
             } footer: {
-                Text(String(localized: "settings.spectrum.hint", defaultValue: "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. Die Farben der Balken kommen immer vom Album-Cover. Der Bildschirmschoner übernimmt den Bildschirm, kurz bevor der Mac das Display abschaltet — nur wenn gerade Ton läuft. Er hält den Bildschirm wach; sobald du etwas anfasst oder die Musik aus ist, sperrt der Mac."))
+                Text(String(localized: "settings.spectrum.hint", defaultValue: "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. Die Farben der Balken kommen immer vom Album-Cover. Mit ⌥⌘S nimmt sich das Spektrum den ganzen Bildschirm und hält ihn wach; sobald du zurückkommst oder die Musik aus ist, sperrt der Mac."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

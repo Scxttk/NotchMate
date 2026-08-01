@@ -3,6 +3,23 @@
 All notable changes to Côte d'OS (formerly Ledge, formerly NotchMate — the
 bundle identifier still is NotchMate, see the README for why).
 
+## [Unreleased]
+
+### Changed
+- **The fullscreen guard is ⌥⌘S only.** 1.5 shipped it as a screen saver as
+  well: an untouched Mac with something playing had the screen taken from it
+  fifteen seconds before the display would have gone dark, and locked when you
+  came back. Guessing that you have left is the part that doesn't work — it
+  guesses wrong on anything you sit and read — so the guess is gone, along with
+  its Settings toggle. Pressing ⌥⌘S does what the screen saver did, at the one
+  moment you actually know you're leaving.
+  - A run armed over music still ends and locks after ninety seconds of
+    silence. One armed in a silent room never ends itself: ⌥⌘S with nothing
+    playing stays up until you come back.
+  - Nothing else changes — the arming, the lock, the note in the pill saying
+    what ended the run and when, and the unarmed takeover you get from the
+    spectrum tab are all as they were.
+
 ## [1.5.0] – 2026-07-30
 
 The release where the wave gets the whole screen, and the app gets signed

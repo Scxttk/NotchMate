@@ -84,7 +84,6 @@ final class UserSettings: ObservableObject {
         /// as a name only so the migration below can find and clear it.
         static let legacyPillSpectrumBarCount = "pillSpectrumBarCount"
         static let pillSpectrumWidth = "pillSpectrumWidth"
-        static let spectrumScreensaverEnabled = "spectrumScreensaverEnabled"
         // Obsidian Quick Capture
         static let vaultBookmark = "obsidianVaultBookmark"
         static let vaultName = "obsidianVaultName"
@@ -143,13 +142,6 @@ final class UserSettings: ObservableObject {
     /// combinations mostly produced spacings nobody had looked at.
     @Published var pillSpectrumWidth: Double {
         didSet { defaults.set(pillSpectrumWidth, forKey: Key.pillSpectrumWidth) }
-    }
-    /// Whether an idle Mac with music running hands the screen to the
-    /// fullscreen spectrum instead of letting the display go dark. See
-    /// `IdleSpectrumMonitor` — the timing follows the system's own display
-    /// sleep setting.
-    @Published var spectrumScreensaverEnabled: Bool {
-        didSet { defaults.set(spectrumScreensaverEnabled, forKey: Key.spectrumScreensaverEnabled) }
     }
 
     // MARK: Obsidian Quick Capture
@@ -278,7 +270,6 @@ final class UserSettings: ObservableObject {
             Key.timerTabEnabled: true,
             Key.pillSpectrumOnly: false,
             Key.pillSpectrumWidth: NotchLayout.pillSpectrumDefaultWidth,
-            Key.spectrumScreensaverEnabled: true,
         ])
         self.mediaSource = MediaSource(rawValue: defaults.string(forKey: Key.mediaSource) ?? "") ?? .auto
         self.appearance = Appearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
@@ -286,7 +277,6 @@ final class UserSettings: ObservableObject {
         self.hudEnabled = defaults.bool(forKey: Key.hudEnabled)
         self.suppressSystemOSD = defaults.bool(forKey: Key.suppressSystemOSD)
         self.pillSpectrumOnly = defaults.bool(forKey: Key.pillSpectrumOnly)
-        self.spectrumScreensaverEnabled = defaults.bool(forKey: Key.spectrumScreensaverEnabled)
         // The width used to mean "spread N bars across this much room", with N
         // set separately. It now means "this much room, filled with bars at a
         // fixed pitch" — a stored value from the old scheme would land on an

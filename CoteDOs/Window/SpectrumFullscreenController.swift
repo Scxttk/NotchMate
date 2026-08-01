@@ -22,9 +22,8 @@ final class SpectrumFullscreenController {
     /// Held for as long as the takeover is up, so the display doesn't go dark
     /// under it — and the Mac doesn't walk on into its lock screen. This is
     /// what lets the takeover *replace* the display sleeping (see
-    /// `IdleSpectrumMonitor`) instead of being wiped out by it 15 seconds
-    /// later. Released the moment the window goes away; nothing else in the
-    /// app keeps the screen alive.
+    /// `SpectrumGuard`) instead of being wiped out by it. Released the moment
+    /// the window goes away; nothing else in the app keeps the screen alive.
     private var displaySleepAssertion: IOPMAssertionID = 0
 
     private let spectrum: SpectrumAnalyzer

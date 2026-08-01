@@ -47,12 +47,12 @@ The wave belongs to whoever is making the sound, too. A Safari video tints the b
 
 ⌥⌘S from anywhere, or a click on the spectrum tab, and the run grows out of the island until it fills the display. Escape brings it back — and the wave flies home to the pill, not to the page, because the page is collapsing behind it by then.
 
-**The part I actually built it for:** leave the Mac alone with music playing and it does this by itself, fifteen seconds before macOS would blank the display, and holds the screen awake. Touch anything and it shrinks away — and the Mac locks behind it, because locking is the half of display-sleep behaviour it just displaced. Quitting the app while it's up locks too. That isn't an escape hatch.
+**The part I actually built it for:** hit ⌥⌘S on your way out of the room. The run holds the screen awake while you're gone, and whatever ends it locks the Mac behind it — because locking is the half of display-sleep behaviour the takeover just displaced. Quitting the app while it's up locks too. That isn't an escape hatch.
 
 It's fussier than it looks, on purpose:
 
-- "Audible" comes from the tap itself, not from a player's play button. A browser video counts. A paused Spotify track with a song loaded doesn't.
-- If something else already holds a display-sleep assertion — a fullscreen YouTube tab — it stands down rather than throwing a spectrum over your video.
+- Nothing arms a run by itself. A Mac that decides on its own that you've left, takes the screen and then locks when you reach for the trackpad is a Mac fighting you; the hotkey is the whole trigger.
+- A run left over music that runs out ends on its own after ninety seconds of silence, and locks — the Mac was left, and the music finishing doesn't change that. "Audible" comes from the tap itself, not from a player's play button: a browser video counts, a paused Spotify track with a song loaded doesn't. Press ⌥⌘S in a silent room and none of this applies; it stays up until you come back.
 - When an armed run ends it leaves a note in the pill saying why and when. `Input 14:02` on a Mac you left at 13:50 is somebody else.
 
 Swiping deliberately doesn't get you here. A two-finger swipe opens the island and stops: carrying the same gesture on into a full-screen visual you didn't ask for turned out to be far too easy to trigger by accident.
