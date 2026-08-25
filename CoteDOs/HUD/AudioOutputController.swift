@@ -15,8 +15,8 @@ final class AudioOutputController: ObservableObject {
     @Published private(set) var devices: [AudioOutputDevice] = []
     @Published private(set) var currentDeviceID: AudioDeviceID = 0
 
-    private var defaultListener: AudioObjectPropertyListenerBlock?
-    private var deviceListListener: AudioObjectPropertyListenerBlock?
+    private var defaultListener: AudioPropertyListener?
+    private var deviceListListener: AudioPropertyListener?
 
     private var defaultAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -32,26 +32,17 @@ final class AudioOutputController: ObservableObject {
     func start() {
         reload()
         let system = AudioObjectID(kAudioObjectSystemObject)
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async { self?.reload() }
-        }
-        defaultListener = block
-        AudioObjectAddPropertyListenerBlock(system, &defaultAddress, DispatchQueue.main, block)
-        let listBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async { self?.reload() }
-        }
-        deviceListListener = listBlock
-        AudioObjectAddPropertyListenerBlock(system, &deviceListAddress, DispatchQueue.main, listBlock)
+        let onDefault = AudioPropertyListener(object: system, address: defaultAddress) { [weak self] in self?.reload() }
+        onDefault.start()
+        defaultListener = onDefault
+        let onList = AudioPropertyListener(object: system, address: deviceListAddress) { [weak self] in self?.reload() }
+        onList.start()
+        deviceListListener = onList
     }
 
     func stop() {
-        let system = AudioObjectID(kAudioObjectSystemObject)
-        if let defaultListener {
-            AudioObjectRemovePropertyListenerBlock(system, &defaultAddress, DispatchQueue.main, defaultListener)
-        }
-        if let deviceListListener {
-            AudioObjectRemovePropertyListenerBlock(system, &deviceListAddress, DispatchQueue.main, deviceListListener)
-        }
+        defaultListener?.stop()
+        deviceListListener?.stop()
         defaultListener = nil
         deviceListListener = nil
     }

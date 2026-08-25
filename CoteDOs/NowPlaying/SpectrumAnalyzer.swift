@@ -87,7 +87,7 @@ final class SpectrumAnalyzer: ObservableObject {
 
     // Rebuilds the tap when the user switches output device (e.g. AirPods
     // in/out): the aggregate can otherwise keep feeding silent samples forever.
-    private var deviceChangeListener: AudioObjectPropertyListenerBlock?
+    private var deviceChangeListener: AudioPropertyListener?
     private var pendingRebuild: DispatchWorkItem?
     private var deviceChangeAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -389,16 +389,15 @@ final class SpectrumAnalyzer: ObservableObject {
 
     private func registerDeviceChangeListener() {
         guard deviceChangeListener == nil else { return }
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            self?.rebuildForDeviceChange()
-        }
-        deviceChangeListener = block
-        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceChangeAddress, queue, block)
+        let listener = AudioPropertyListener(
+            object: AudioObjectID(kAudioObjectSystemObject), address: deviceChangeAddress
+        ) { [weak self] in self?.rebuildForDeviceChange() }
+        listener.start()
+        deviceChangeListener = listener
     }
 
     private func unregisterDeviceChangeListener() {
-        guard let block = deviceChangeListener else { return }
-        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceChangeAddress, queue, block)
+        deviceChangeListener?.stop()
         deviceChangeListener = nil
     }
 

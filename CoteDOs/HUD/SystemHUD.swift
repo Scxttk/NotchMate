@@ -151,9 +151,9 @@ private final class VolumeHUDProvider {
     var onChange: ((_ level: Double, _ muted: Bool, _ userInitiated: Bool) -> Void)?
 
     private var device: AudioDeviceID = 0
-    private var deviceListener: AudioObjectPropertyListenerBlock?
-    private var muteListener: AudioObjectPropertyListenerBlock?
-    private var defaultListener: AudioObjectPropertyListenerBlock?
+    private var volumeListeners: [AudioPropertyListener] = []
+    private var muteListener: AudioPropertyListener?
+    private var defaultListener: AudioPropertyListener?
     /// Level at the last HUD we actually showed. Jitter is measured against this
     /// (not the last raw read) so oscillation around a stable point never
     /// accumulates past the threshold.
@@ -173,10 +173,6 @@ private final class VolumeHUDProvider {
     private var suppressUntil = Date.distantPast
     /// The first attach (at start) must not arm suppression — only real switches.
     private var didInitialAttach = false
-    /// Volume elements we attached a listener to, so we can remove exactly those.
-    private var watchedElements: [AudioObjectPropertyElement] = []
-    private var watchesMute = false
-
     private var defaultDeviceAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
         mScope: kAudioObjectPropertyScopeGlobal,
@@ -199,22 +195,16 @@ private final class VolumeHUDProvider {
 
     func start() {
         attachToDefaultDevice()
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async { self?.attachToDefaultDevice() }
-        }
-        defaultListener = block
-        AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &defaultDeviceAddress, DispatchQueue.main, block
-        )
+        let listener = AudioPropertyListener(
+            object: AudioObjectID(kAudioObjectSystemObject), address: defaultDeviceAddress
+        ) { [weak self] in self?.attachToDefaultDevice() }
+        listener.start()
+        defaultListener = listener
     }
 
     func stop() {
         detachDeviceListeners()
-        if let defaultListener {
-            AudioObjectRemovePropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject), &defaultDeviceAddress, DispatchQueue.main, defaultListener
-            )
-        }
+        defaultListener?.stop()
         defaultListener = nil
     }
 
@@ -298,43 +288,24 @@ private final class VolumeHUDProvider {
         if didInitialAttach { suppressUntil = Date().addingTimeInterval(0.8) }
         didInitialAttach = true
 
-        let volumeBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async { self?.report() }
-        }
-        deviceListener = volumeBlock
         // Built-in speakers often expose no master (Main) volume scalar — only
         // per-channel — so a listener on the Main element alone never fires.
         // Attach to every element that actually has the property (Main + L/R).
         for element in [kAudioObjectPropertyElementMain, UInt32(1), UInt32(2)] {
-            var address = volumeAddress(element: element)
-            guard AudioObjectHasProperty(device, &address) else { continue }
-            AudioObjectAddPropertyListenerBlock(device, &address, DispatchQueue.main, volumeBlock)
-            watchedElements.append(element)
+            let listener = AudioPropertyListener(
+                object: device, address: volumeAddress(element: element)
+            ) { [weak self] in self?.report() }
+            if listener.start() { volumeListeners.append(listener) }
         }
 
-        if AudioObjectHasProperty(device, &muteAddress) {
-            let muteBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-                DispatchQueue.main.async { self?.report() }
-            }
-            muteListener = muteBlock
-            AudioObjectAddPropertyListenerBlock(device, &muteAddress, DispatchQueue.main, muteBlock)
-            watchesMute = true
-        }
+        let mute = AudioPropertyListener(object: device, address: muteAddress) { [weak self] in self?.report() }
+        if mute.start() { muteListener = mute }
     }
 
     private func detachDeviceListeners() {
-        if device != 0, let deviceListener {
-            for element in watchedElements {
-                var address = volumeAddress(element: element)
-                AudioObjectRemovePropertyListenerBlock(device, &address, DispatchQueue.main, deviceListener)
-            }
-        }
-        if device != 0, watchesMute, let muteListener {
-            AudioObjectRemovePropertyListenerBlock(device, &muteAddress, DispatchQueue.main, muteListener)
-        }
-        watchedElements.removeAll()
-        watchesMute = false
-        deviceListener = nil
+        volumeListeners.forEach { $0.stop() }
+        volumeListeners.removeAll()
+        muteListener?.stop()
         muteListener = nil
     }
 

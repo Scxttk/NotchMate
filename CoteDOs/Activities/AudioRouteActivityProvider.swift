@@ -7,7 +7,7 @@ final class AudioRouteActivityProvider {
     var onActivity: ((NotchActivity) -> Void)?
 
     private var lastDeviceID: AudioDeviceID = 0
-    private var listenerBlock: AudioObjectPropertyListenerBlock?
+    private var listener: AudioPropertyListener?
     private var address = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
         mScope: kAudioObjectPropertyScopeGlobal,
@@ -16,22 +16,16 @@ final class AudioRouteActivityProvider {
 
     func start() {
         lastDeviceID = currentOutputDevice()
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async { self?.handleChange() }
-        }
-        listenerBlock = block
-        AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block
-        )
+        let listener = AudioPropertyListener(
+            object: AudioObjectID(kAudioObjectSystemObject), address: address
+        ) { [weak self] in self?.handleChange() }
+        listener.start()
+        self.listener = listener
     }
 
     func stop() {
-        if let listenerBlock {
-            AudioObjectRemovePropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listenerBlock
-            )
-        }
-        listenerBlock = nil
+        listener?.stop()
+        listener = nil
     }
 
     private func handleChange() {
