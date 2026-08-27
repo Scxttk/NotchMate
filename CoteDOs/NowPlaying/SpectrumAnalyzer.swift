@@ -263,6 +263,11 @@ final class SpectrumAnalyzer: ObservableObject {
         let processes = foreignOutputProcesses().map(\.id)
         guard !processes.isEmpty else {
             suspended = true
+            // Quitting the player mid-song lands exactly here — the source poll
+            // sees the process set empty, rebuilds, and finds nothing to tap.
+            // Without this the wave that was running a second ago stays frozen
+            // on screen forever; see `resetPublishedSignal`.
+            resetPublishedSignal()
             // `startSourceCheckTimer`, not `reschedule`: on a cold launch into
             // silence the timer does not exist yet, and rescheduling nothing
             // would leave the analyzer with no probe and therefore no way back.
@@ -332,6 +337,10 @@ final class SpectrumAnalyzer: ObservableObject {
         trace("tap build FAILED — falling back to probing")
         teardown()
         suspended = true
+        // No tap means no data, so the wave must not keep showing the last one
+        // it had. A scriptable player that really is playing keeps the hero pill
+        // open through `nowPlaying.isPlaying` anyway.
+        resetPublishedSignal()
         // A build that keeps failing (no permission, say) while some app holds
         // an output stream would otherwise retry every probe tick forever. Back
         // off instead; a real signal is not what is missing here.
@@ -354,14 +363,39 @@ final class SpectrumAnalyzer: ObservableObject {
         unregisterDeviceChangeListener()
         stopSourceCheckTimer()
         guard wasRunning else { return }
-        // Reset published state on the main thread — weak so a pending block can
-        // never resurrect a deallocating instance.
+        resetPublishedSignal()
+        // Only `stop` clears these two: a suspension keeps claiming the analyzer
+        // is on duty (see `suspendForSilence`), and the source icon is answered
+        // by the poll rather than by the tap.
+        DispatchQueue.main.async { [weak self] in
+            self?.isLive = false
+            self?.sourceBundleID = nil
+        }
+    }
+
+    /// Zero the published signal state. Everything that leaves the analyzer
+    /// without a running tap has to call this.
+    ///
+    /// `hasSignal` and `bands` are only ever written from `publishIfDue`, which
+    /// only runs from the audio callback. So a tap that dies while a signal is
+    /// still being held — quit Spotify mid-song and the source poll rebuilds
+    /// into an empty process list within ~1.3s, inside `signalHoldSeconds` —
+    /// freezes both at their last values with nothing left to expire them. The
+    /// pill then sits open over a motionless wave until some app makes a sound
+    /// again, and `SpectrumGuard` never sees the silence it waits for either.
+    ///
+    /// Not called from `teardown` itself: the successful rebuild path tears down
+    /// and builds again in the same work item, and zeroing there would blink the
+    /// pill shut on every device switch.
+    private func resetPublishedSignal() {
+        // Safe to touch the analysis-side values directly: `teardown` has
+        // already destroyed the IOProc, so nothing is reading them.
         lastSignalTime = 0
+        lastPublished = []
+        // Weak, so a pending block can never resurrect a deallocating instance.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.isLive = false
             self.hasSignal = false
-            self.sourceBundleID = nil
             self.bands.values = Array(repeating: 0, count: self.bandCount)
         }
     }
@@ -693,6 +727,13 @@ final class SpectrumAnalyzer: ObservableObject {
         bands.values = spatiallySmoothed(levels).map { CGFloat($0) }
         hasSignal = true
         isLive = true
+    }
+
+    /// Test entry for the "the tap went away" path. The real callers of
+    /// `resetPublishedSignal` all sit behind `buildTap`, which needs CoreAudio
+    /// and the recording permission, so a test reaches the reset directly.
+    func resetPublishedSignalForTesting() {
+        resetPublishedSignal()
     }
     #endif
 

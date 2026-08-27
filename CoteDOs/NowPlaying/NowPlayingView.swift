@@ -19,6 +19,15 @@ struct NowPlayingView: View {
     /// so the bar follows the finger before the seek lands.
     @State private var scrubFraction: Double?
 
+    /// True on a side border, where the page is tall and narrow.
+    ///
+    /// The cover, the title and the wave stack instead of sitting in a row:
+    /// side by side in a ~200 pt column the title had about 90 pt to live in
+    /// and truncated to "Slow Asce…", while the height above and below the
+    /// cluster went to waste. Stacked, the cover can be half again as big, the
+    /// title gets the full width, and the page fills out.
+    var portrait: Bool = false
+
     var body: some View {
         // Empty containers (Spacers + a narrower content column) pad the edges,
         // top and bottom so the actual controls cluster closer together in the
@@ -41,10 +50,10 @@ struct NowPlayingView: View {
     // MARK: Row 1 — cover · title/artist · wave
 
     private var topRow: some View {
-        HStack(spacing: 12) {
+        AxisStack(axis: portrait ? .vertical : .horizontal, spacing: 12) {
             artwork
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: portrait ? .center : .leading, spacing: 2) {
                 if let track = nowPlaying.track {
                     Text(track.name)
                         .font(.system(size: 14, weight: .bold))
@@ -76,7 +85,9 @@ struct NowPlayingView: View {
                 }
             }
 
-            Spacer(minLength: 4)
+            // Stacked, the wave sits under the title rather than off to one
+            // side, so there is nothing to push apart.
+            if !portrait { Spacer(minLength: 4) }
 
             // Only the real track's accent when there's an actual track to
             // derive it from — otherwise (system audio with no scriptable
@@ -96,9 +107,11 @@ struct NowPlayingView: View {
                 isActive: nowPlaying.isPlaying && nowPlaying.screensAwake,
                 tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
                 coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
-                count: 6
+                count: portrait ? 16 : 6
             )
-            .frame(width: 34, height: 30)
+            // Stacked under a full-width title, a 34 pt run reads as a row of
+            // dots rather than as a wave; across the column it reads as one.
+            .frame(width: portrait ? 140 : 34, height: 30)
         }
     }
 
@@ -121,7 +134,7 @@ struct NowPlayingView: View {
                     placeholderArtwork
                 }
             }
-            .frame(width: 56, height: 56)
+            .frame(width: portrait ? 96 : 56, height: portrait ? 96 : 56)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)

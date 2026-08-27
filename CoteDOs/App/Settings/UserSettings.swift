@@ -4,6 +4,10 @@ import SwiftUI
 extension Notification.Name {
     /// Posted when the user resets all data; live models clear themselves.
     static let notchMateResetData = Notification.Name("com.scott.notchmate.resetData")
+    /// Posted by Settings to put a dragged-away island back at the top centre.
+    /// A notification rather than a reference because the Settings scene is
+    /// built by SwiftUI and has no path to the window controller.
+    static let notchResetPlacement = Notification.Name("com.scott.notchmate.resetPlacement")
 }
 
 /// User-facing preferences, persisted in `UserDefaults`. Injected as an
@@ -77,6 +81,7 @@ final class UserSettings: ObservableObject {
         static let mediaSource = "mediaSource"
         static let appearance = "appearance"
         static let liveActivitiesEnabled = "liveActivitiesEnabled"
+        static let audioRouteActivityEnabled = "audioRouteActivityEnabled"
         static let hudEnabled = "hudEnabled"
         static let suppressSystemOSD = "suppressSystemOSD"
         static let pillSpectrumOnly = "pillSpectrumOnly"
@@ -118,6 +123,12 @@ final class UserSettings: ObservableObject {
     }
     @Published var liveActivitiesEnabled: Bool {
         didSet { defaults.set(liveActivitiesEnabled, forKey: Key.liveActivitiesEnabled) }
+    }
+    /// The pill that names the new output device when the audio route changes.
+    /// macOS shows its own connect banner for AirPods, so this one lands on top
+    /// of Apple's — hence its own switch, separate from the other activities.
+    @Published var audioRouteActivityEnabled: Bool {
+        didSet { defaults.set(audioRouteActivityEnabled, forKey: Key.audioRouteActivityEnabled) }
     }
     @Published var hudEnabled: Bool {
         didSet { defaults.set(hudEnabled, forKey: Key.hudEnabled) }
@@ -251,6 +262,7 @@ final class UserSettings: ObservableObject {
         self.defaults = defaults
         defaults.register(defaults: [
             Key.liveActivitiesEnabled: true,
+            Key.audioRouteActivityEnabled: true,
             Key.hudEnabled: true,
             Key.suppressSystemOSD: true,
             Key.dailyFolder: "01-daily",
@@ -274,6 +286,7 @@ final class UserSettings: ObservableObject {
         self.mediaSource = MediaSource(rawValue: defaults.string(forKey: Key.mediaSource) ?? "") ?? .auto
         self.appearance = Appearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
         self.liveActivitiesEnabled = defaults.bool(forKey: Key.liveActivitiesEnabled)
+        self.audioRouteActivityEnabled = defaults.bool(forKey: Key.audioRouteActivityEnabled)
         self.hudEnabled = defaults.bool(forKey: Key.hudEnabled)
         self.suppressSystemOSD = defaults.bool(forKey: Key.suppressSystemOSD)
         self.pillSpectrumOnly = defaults.bool(forKey: Key.pillSpectrumOnly)

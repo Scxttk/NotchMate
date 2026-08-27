@@ -18,6 +18,7 @@ final class ActivityManager: ObservableObject {
     func start() {
         battery.onActivity = { [weak self] in self?.present($0) }
         audioRoute.onActivity = { [weak self] in self?.present($0) }
+        audioRoute.isEnabled = { [weak self] in self?.settings.audioRouteActivityEnabled ?? false }
         battery.start()
         audioRoute.start()
     }

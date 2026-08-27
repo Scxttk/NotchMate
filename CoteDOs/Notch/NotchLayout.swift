@@ -29,8 +29,8 @@ enum NotchLayout {
     /// by the rounded ends and the glyph read as shaved down its sides.
     static let collapsedGlyphWidth: CGFloat = 22
     /// Now-playing artwork thumbnail. Sized so it keeps ~5pt of black above it
-    /// in the 24pt pill — at 16pt it sat visually pressed against (Scott:
-    /// "abgeschnitten von") the top screen edge.
+    /// in the 24pt pill — at 16pt it read as pressed against the top screen
+    /// edge.
     static let collapsedArtworkWidth: CGFloat = 14
     /// The little frequency (wave-bars) visualizer next to the artwork.
     /// 5 × 2.0 + 4 × 1.6 = 16.4, rounded up for a hair of buffer.
@@ -131,6 +131,15 @@ enum NotchLayout {
     /// spectrum page (356 × 126 pt usable → 2.83). Keeping this ratio is what
     /// makes the pill read as the page in miniature rather than as a stripe.
     static let pillSpectrumFieldAspect: CGFloat = 2.83
+    /// The same for a run standing on a side border.
+    ///
+    /// The letterbox exists so a squarish field doesn't produce a handful of
+    /// enormous bars, and the landscape page never actually hits it — its own
+    /// height binds first. A portrait page is far squarer (≈1.5), so 2.83 held
+    /// the run to barely half the width it had and left the rest black. 1.9 is
+    /// the loosest ratio at which the bars still read as bars: at the portrait
+    /// page's ~290 pt run that is a 12 pt bar, against the landscape page's 11.
+    static let portraitStageFieldAspect: CGFloat = 1.9
     /// Vertical range the wave may occupy. The lower bound is not arbitrary:
     /// 24 / `waveBarAspectRatio` is exactly `collapsedWaveBarWidth` (2.0 pt),
     /// so at the narrow end the derived geometry *is* the Apple-measured one —
@@ -198,14 +207,15 @@ enum NotchLayout {
     /// The wave's geometry for a stage of `size` — bar thickness from the
     /// height (see `waveBarAspectRatio`), then as many bars as fit the width.
     /// The same rule the pill scales down, which is what lets the two morph.
-    static func stageWaveGeometry(in size: CGSize, barCount forcedCount: Int? = nil) -> PillSpectrumGeometry {
+    static func stageWaveGeometry(in size: CGSize, barCount forcedCount: Int? = nil,
+                                  fieldAspect: CGFloat = pillSpectrumFieldAspect) -> PillSpectrumGeometry {
         let width = max(0, size.width - stageInset * 2)
         // Never taller than the page's own field shape. A whole screen is much
         // squarer than the panel (≈1.6 against 2.83), and since bar thickness
         // follows the field height, an unclamped fullscreen field produced a
         // handful of enormous bars instead of the page's run made bigger. Letter-
         // boxing keeps every size reading as the same wave.
-        let height = min(max(0, size.height - stageInset * 2), width / pillSpectrumFieldAspect)
+        let height = min(max(0, size.height - stageInset * 2), width / fieldAspect)
         guard width > 0, height > 0 else {
             return PillSpectrumGeometry(waveHeight: 0, barWidth: 0, spacing: 0, barCount: 1, runWidth: 0)
         }
@@ -248,10 +258,11 @@ enum NotchLayout {
     /// `expandedRowSpacing` between them, and leaving it out made every
     /// prediction of the page's wave 8 pt too tall and 4 pt too high — enough
     /// for the travelling wave and the page's own to disagree visibly.
-    static var expandedPageSize: CGSize {
-        CGSize(width: expandedWidth - expandedContentInset * 2,
-               height: expandedHeight - currentCollapsedHeight - expandedBottomPadding - expandedRowSpacing)
-    }
+    /// The top border's page size specifically. Everything downstream of this
+    /// — the pill⇄page wave morph and its two centre lines — is arithmetic
+    /// about an island hanging from the top edge, and that is the only border
+    /// the travelling wave runs on (see `NotchRootView.morphingWaveActive`).
+    static var expandedPageSize: CGSize { expandedPageSize(on: .top) }
 
     /// What the spectrum page's wave settles at once the island is open. The
     /// pill's shrink-back animation starts from these metrics, so the run the
@@ -354,8 +365,7 @@ enum NotchLayout {
     /// Focus-timer segment in the collapsed pill (icon + monospaced readout).
     /// Its width is estimated as icon + inner spacing + chars × per-char width
     /// (see `NotchViewModel.collapsedWidth`); the per-char estimate errs
-    /// generous like `soloLabelCharWidth` — looseness is harmless, clipping
-    /// is not.
+    /// generous — looseness is harmless, clipping is not.
     static let collapsedTimerFontSize: CGFloat = 11
     static let collapsedTimerIconSize: CGFloat = 10
     static let collapsedTimerIconWidth: CGFloat = 12
@@ -368,7 +378,8 @@ enum NotchLayout {
     /// Extra padding at each rounded end of the collapsed capsule. Kept small:
     /// the content is only ~13pt tall and vertically centered, so the corner
     /// curve barely intrudes at its edges — a tight pill reads more iPhone-like
-    /// than a wide one (Scott: idle pill with one icon was too wide).
+    /// than a wide one; at the previous value the idle one-icon pill read
+    /// as too wide.
     static let collapsedEndPadding: CGFloat = 4
     /// Horizontal inset of the expanded content (and the tab-page carousel clip
     /// in particular) from the island edge, clearing the rounded corners.
@@ -377,20 +388,66 @@ enum NotchLayout {
     static let expandedWidth: CGFloat = 460
     static let expandedHeight: CGFloat = 212
 
-    /// Width of the `.band` stage: a capsule holding every icon+label tab with
-    /// breathing room to the rounded ends. Five tabs come to ~472 pt natural, so
-    /// the row is scaled down to fit (see `tabBarFitScale`) rather than the
-    /// capsule being widened to hold it — 380 is tuned against the pill, not
-    /// against the label count, and it has to stay that way.
+    /// The open island standing on a side border.
+    ///
+    /// Not the landscape island turned on its side: a 212 pt-thick portrait
+    /// island leaves the pages ~150 pt to work in once the tab column and the
+    /// insets have taken their share, which is narrower than the music page's
+    /// cover and title need.
+    ///
+    /// Length is set by what has to fit rather than by symmetry with the
+    /// landscape island: the tab column is five 38 pt slots and four gaps, so
+    /// 214 pt, and the pages' own content clusters run 130–200 pt. 420 pt (the
+    /// first try, a straight swap of the landscape length) left every page a
+    /// small cluster adrift in a field of black.
+    static let expandedVerticalLength: CGFloat = 320
+    static let expandedVerticalThickness: CGFloat = 264
+
+    /// The open island's size on a given border.
+    static func expandedSize(on dock: NotchDock) -> CGSize {
+        dock.isHorizontal
+            ? CGSize(width: expandedWidth, height: expandedHeight)
+            : dock.size(length: expandedVerticalLength, thickness: expandedVerticalThickness)
+    }
+
+    /// Content area one carousel page gets on a given border. The band the tab
+    /// strip occupies, the gap after it and the padding at the far edge all
+    /// come off the thickness; the insets come off the length.
+    static func expandedPageSize(on dock: NotchDock) -> CGSize {
+        let island = expandedSize(on: dock)
+        let (length, thickness) = dock.lengthAndThickness(of: island)
+        return dock.size(
+            length: length - expandedContentInset * 2,
+            thickness: thickness - currentCollapsedHeight - expandedBottomPadding - expandedRowSpacing
+        )
+    }
+
+    /// One tab's slot on a given border: the strip runs along the border, so
+    /// the slot is long in that direction and thin across it — thin enough to
+    /// sit inside the pill's own band, which is what keeps the selected glyph
+    /// on the spot the pill handed it over at.
+    static func tabItemSize(on dock: NotchDock) -> CGSize {
+        dock.size(length: tabItemWidth, thickness: tabItemHeight)
+    }
+
+    /// Width of the `.band` stage: a capsule holding every tab with breathing
+    /// room to the rounded ends. Tuned against the pill, not against the row —
+    /// five icon-only tabs come to ~210 pt and sit well inside it.
     static let bandWidth: CGFloat = 380
-    /// `.solo` stage width is per selected tab (`NotchViewModel.soloWidth`);
-    /// these size the estimate — a fixed base (icon + spacings + button and end
-    /// padding + the two content insets) plus the label's estimated width,
-    /// counted twice since the centred icon mirrors the label as empty space.
+
+    /// The `.band` stage's length on a given border. A portrait island is
+    /// shorter than the landscape band capsule, and a transient stage longer
+    /// than the island it is on the way to is a silhouette that grows before it
+    /// shrinks — so on a side border the band stops a little short of the open
+    /// island instead.
+    static func bandLength(on dock: NotchDock) -> CGFloat {
+        dock.isHorizontal ? bandWidth : expandedVerticalLength - bandVerticalInset
+    }
+    /// How far the side-border band capsule stops short of the open island.
+    static let bandVerticalInset: CGFloat = 24
+    /// Width of the `.solo` stage — one icon, its button padding, and the
+    /// capsule's own end padding. See `NotchViewModel.soloWidth`.
     static let soloBaseWidth: CGFloat = 74
-    /// Still here because the *solo* stage's own estimate uses it for the pill
-    /// readout, not for the tab row — the tab row has no labels left to measure.
-    static let soloLabelCharWidth: CGFloat = 8
 
     /// Point size the tab glyphs are drawn at — in the tab bar and, because the
     /// pill's idle glyph is the very same `TabIcon`, in the pill too.
@@ -410,46 +467,6 @@ enum NotchLayout {
     static let tabItemHeight: CGFloat = 24
     /// Fill behind the selected tab, standing in for the title it replaced.
     static let tabSelectionFill: Double = 0.16
-    static let tabIconEstimatedWidth: CGFloat = 16
-    /// Room the tab row has. Measured against the *band* capsule, not the
-    /// expanded one: the same row renders at both widths (the expand and the
-    /// collapse walk each rest in `.band`), so a scale that only fits the wider
-    /// one clipped the outermost tabs against the rim for the whole band stage
-    /// — precisely the tabs the scaling exists to rescue.
-    static var tabBarAvailableWidth: CGFloat { bandWidth - 2 * expandedContentInset }
-    /// A hair of slack so the outermost label never touches the rounded rim.
-    private static let tabBarFitMargin: CGFloat = 0.97
-
-    /// Estimated width of one expanded tab — icon, gap, label, padding — using
-    /// the same deliberately generous per-character figure as `soloLabelCharWidth`
-    /// (over-estimating shrinks the row slightly; clipping it does not).
-    static func tabItemWidthEstimate(labelCharacters: Int) -> CGFloat {
-        tabIconEstimatedWidth + tabIconLabelSpacing
-            + CGFloat(labelCharacters) * soloLabelCharWidth
-            + 2 * tabItemPaddingHorizontal
-    }
-
-    /// How much the whole tab row has to be scaled down to stay inside the
-    /// island, or 1 when it already fits.
-    ///
-    /// Five tabs with German labels come to roughly 472 pt against the 348 pt
-    /// the band capsule actually offers (`tabBarAvailableWidth`), and an
-    /// over-wide `HStack` does not wrap or truncate — it overflows its centre, so
-    /// the outer labels run past the capsule and read as floating outside it.
-    /// Scaling the row (rather than shrinking fonts and paddings individually) is
-    /// what keeps the *solo* metrics untouched, and those are tuned to the point
-    /// of pixel-identity with the pill's glyph.
-    static func tabBarFitScale(titles: [String]) -> CGFloat {
-        guard !titles.isEmpty else { return 1 }
-        let natural = titles.reduce(CGFloat(0)) { $0 + tabItemWidthEstimate(labelCharacters: $1.count) }
-            + CGFloat(titles.count - 1) * tabBarSpacing
-        guard natural > 0 else { return 1 }
-        return min(1, tabBarAvailableWidth * tabBarFitMargin / natural)
-    }
-    /// HStack spacing between a tab's icon and its label — also the amount the
-    /// solo tab is shifted by to re-centre the icon.
-    static let tabIconLabelSpacing: CGFloat = 4
-    /// Spacing between tab groups in the expanded tab bar.
     /// Breathing room above the tab row while the island is open.
     ///
     /// The row otherwise sits in the collapsed pill's own 24 pt band, flush to
@@ -468,9 +485,6 @@ enum NotchLayout {
     /// third of every icon.
     static let tabBarTopInset: CGFloat = 9
     static let tabBarSpacing: CGFloat = 6
-    /// Padding inside each tab button (around icon + label).
-    static let tabItemPaddingVertical: CGFloat = 3
-    static let tabItemPaddingHorizontal: CGFloat = 10
     /// Foreground opacity of an unselected tab (selected is fully opaque).
     static let tabInactiveOpacity: Double = 0.55
     /// Vertical spacing between the tab bar and the page carousel when expanded.
@@ -489,19 +503,26 @@ enum NotchLayout {
     /// each a 0.15–0.16 s fade) keeps fitting inside its stage's rest.
     static let bandCollapseDelay: TimeInterval = 0.18  // .band → .solo
     static let soloCollapseDelay: TimeInterval = 0.18  // .solo → .condensing
-    /// How long the condensing stage (label fades, icon centres, capsule
-    /// narrows to pill width) runs before the pill content swaps in. This
-    /// must outlast the *icon's* travel, not just the capsule's — and that
-    /// travel is long: the icon flies from its tab-bar slot to the capsule
-    /// centre (~155 pt, measured via the in-app geometry logger) on the
-    /// `smooth(0.55)` spring that starts at `.solo`. A critically damped
-    /// spring still carries ~0.8% of a 155 pt travel 0.6 s in — ≈ 1.3 pt,
-    /// which the hard-cut handover turned into a visible terminal hop at the
-    /// earlier 0.30/0.42 values. 0.55 puts the swap ≈ 0.73 s after `.solo`
-    /// (residual ≈ 0.3 pt, sub-pixel). The extra wait is invisible: the
-    /// silhouette has settled long before, the island just holds a
-    /// pill-identical still until the swap.
-    static let condenseSwapDelay: TimeInterval = 0.55
+    /// How long the condensing stage (icon centres, capsule narrows to pill
+    /// width) runs before the pill content swaps in. It has to outlast the
+    /// *icon's* travel, not just the capsule's, because the handover is a hard
+    /// cut: the glyph must already be where the pill will draw it.
+    ///
+    /// That travel used to be the reason this stage was so long. On the
+    /// capsule's own `smooth(0.55)` spring the icon needed ~0.7 s to land
+    /// sub-pixel, so the swap waited 0.55 s past `.condensing` — and because
+    /// the wait is skipped whenever the pill has hero content (music, other
+    /// system audio, a running timer), the very same gesture closed the island
+    /// in 0.36 s or in 0.94 s depending on whether anything happened to be
+    /// audible. Nothing on screen explains the difference, so it reads as the
+    /// notch randomly closing in slow motion.
+    ///
+    /// The row now condenses on its own, much faster clock
+    /// (`tabCondenseAnimation`), which is what the capsule's calm settling was
+    /// holding up. 88 pt of travel — the widest slot offset, Musik's — is
+    /// sub-pixel 0.36 s after `.solo`, so one plain rest is enough and every
+    /// collapse takes the same time.
+    static let condenseSwapDelay: TimeInterval = 0.18
     /// Expand rests are near-zero: opening must move the instant the hover
     /// lands, and the expand hops exist as spring waypoints (each retargeted
     /// mid-flight), not as shapes to linger on. Stages that don't change the
@@ -517,6 +538,20 @@ enum NotchLayout {
     /// position, or clipped letter fragments linger at the rim.
     static var condenseFadeAnimation: Animation { Motion.gate(.easeOut(duration: 0.15)) }
 
+    /// The tab row's own clock for shedding its unselected tabs and gathering
+    /// the surviving glyph at the capsule centre (and, on the way up, letting it
+    /// back out to its slot).
+    ///
+    /// Deliberately not the capsule's spring. The capsule is a big shape whose
+    /// calm 0.55 s settling is the point; the icon is one glyph with 88 pt to
+    /// cover, and riding the capsule's spring it was still visibly creeping
+    /// inward half a second in — the slowest thing on screen during a collapse,
+    /// and the reason the hard-cut handover had to wait so long for it. On its
+    /// own bounce-free clock it is home in under a third of a second while the
+    /// capsule keeps settling around it, which is the same "content lands early
+    /// in a still-moving island" pattern the pages already use.
+    static var tabCondenseAnimation: Animation { Motion.gate(.smooth(duration: 0.28)) }
+
     // The pill ⇄ condensed-icon handover is a hard cut (see `iconHandover`
     // in NotchView) — it deliberately has no timing constants: every
     // overlap-based variant (crossfade, hold-opaque) drew both near-identical
@@ -525,9 +560,10 @@ enum NotchLayout {
     /// Delay before the *unselected* tabs fade in once the band assembles on
     /// expand. The selected icon travels from the capsule centre to its slot
     /// during the band/final hops, passing over its neighbours' positions —
-    /// fading them in immediately painted them under the still-flying icon
-    /// (Scott: "voll die überlagerung"). Timed so the fade starts once the
-    /// flight is essentially home: the capsule leads, its content follows.
+    /// fading them in immediately painted them under the still-flying icon,
+    /// which reads as one glyph overlapping another. Timed so the fade starts
+    /// once the flight is essentially home: the capsule leads, its content
+    /// follows.
     static let tabJoinFadeDelay: TimeInterval = 0.20
 
     /// When music plays, the collapse hands the tab bar off to the now-playing
@@ -551,6 +587,22 @@ enum NotchLayout {
     /// Wider pill for the audio-route activity (bigger icon + device name + battery)
     /// so a connecting device reads clearly.
     static let activityRouteWidth: CGFloat = 264
+    /// A wordless activity on a side border: just the glyph.
+    static let activityVerticalLength: CGFloat = 44
+    /// The same with a progress bar under it (the volume and brightness HUDs).
+    static let activityVerticalProgressLength: CGFloat = 104
+
+    /// How long the collapsed capsule runs while a live activity owns it.
+    ///
+    /// On a side border the activity gives up its words. A device name turned
+    /// on its side next to an upright glyph reads as a rendering fault rather
+    /// than as a vertical pill, and what the pill is actually *for* — which
+    /// device, how loud — survives in the glyph and the bar. So a vertical
+    /// activity is the glyph, plus its progress when it has any.
+    static func activityLength(isRoute: Bool, hasProgress: Bool, on dock: NotchDock) -> CGFloat {
+        guard !dock.isHorizontal else { return isRoute ? activityRouteWidth : activityWidth }
+        return hasProgress ? activityVerticalProgressLength : activityVerticalLength
+    }
 
     // MARK: Island silhouette (iPhone Dynamic Island style)
 
@@ -585,6 +637,28 @@ enum NotchLayout {
     /// The vertical margin also absorbs the top gap the island floats below.
     static let panelHorizontalMargin: CGFloat = 60
     static var panelVerticalMargin: CGFloat { 24 + islandTopGap }
+
+    // MARK: Dragging the island to another border
+
+    /// How far the cursor must travel with the button down before a press on
+    /// the island becomes a drag of the whole panel. Small enough that dragging
+    /// feels immediate, large enough that a click with a shaky hand is still a
+    /// click.
+    static let panelDragThreshold: CGFloat = 4
+    /// Within this much of an edge's centre a released drag lands exactly
+    /// centred — the way back to the notch's home pose without aiming.
+    static let dockCentreSnap: CGFloat = 14
+    /// And within this much of either *end* of a border it goes into that
+    /// corner. Wider than the centre snap because a corner is a bigger target
+    /// to want and a harder one to hit: the island cannot be dragged past the
+    /// screen edge, so the gesture is "shove it into the corner" rather than
+    /// "place it exactly".
+    static let dockCornerSnap: CGFloat = 48
+    /// The glide onto the border once the button comes up. The panel's frame
+    /// (AppKit) and the island's alignment inside it (SwiftUI) both animate,
+    /// so they share one duration or the island slides out of its own panel.
+    static let dockSettleDuration: TimeInterval = 0.22
+    static var dockSettleAnimation: Animation { Motion.gate(.easeInOut(duration: dockSettleDuration)) }
 
     // MARK: Safari fullscreen dodge
 
@@ -694,8 +768,8 @@ enum NotchLayout {
     /// How long after the island reaches `.expanded` the page carousel is
     /// allowed to mount. Building all five tab pages is the single heaviest
     /// main-thread moment of the whole walk, and it used to land exactly
-    /// mid-flight of the final spring — a visible dropped-frame hitch
-    /// (Scott: "ruckelig"). Deferred past the spring's fast phase, the shape
+    /// mid-flight of the final spring — a visible dropped-frame hitch.
+    /// Deferred past the spring's fast phase, the shape
     /// morphs on an empty island and the content materialises into a nearly
     /// still frame — the iPhone's own trick.
     static let pagesSettleDelay: TimeInterval = 0.18

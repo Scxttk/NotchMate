@@ -16,11 +16,12 @@ struct ObsidianVault {
     /// `text`; for pre-formatted markdown (e.g. a `[title](url)` link) pass the
     /// content and `asLink == true` to skip the timestamp/escaping of the body.
     func append(text: String, asLink: Bool, settings: UserSettings) throws -> URL {
-        let (noteURL, root) = try resolveDailyNote(settings: settings)
-        let dateString = dailyFormatter(settings.dailyFormat).string(from: Date())
+        let day = Date()
+        let (noteURL, root, dateString) = try resolveDailyNote(on: day, settings: settings)
 
         let bullet = formatBullet(text, asLink: asLink, settings: settings)
-        try insert(bullet: bullet, underHeading: settings.captureHeading, into: noteURL)
+        try insert(bullet: bullet, underHeading: settings.captureHeading, into: noteURL,
+                   seed: Self.seed(root: root, day: day, title: dateString, settings: settings))
 
         if settings.captureMode == .openInObsidian {
             openInObsidian(folder: settings.dailyFolder, file: dateString, root: root, settings: settings)
@@ -33,26 +34,42 @@ struct ObsidianVault {
     /// with a `[minutes::]` query. `start` + `minutes` describe the run;
     /// `minutes` is the actually elapsed time, not necessarily the preset's
     /// full duration (an aborted session is logged with what really happened).
+    ///
+    /// Filed under the day the session *started*, not the day it ended: a block
+    /// running through midnight belongs to the evening it was worked, which is
+    /// also the only reading under which the bullet's own `23:50–00:15` makes
+    /// sense in the note it sits in.
     @discardableResult
     func appendFocusSession(name: String, start: Date, minutes: Int, settings: UserSettings) throws -> URL {
-        let (noteURL, _) = try resolveDailyNote(settings: settings)
+        let (noteURL, root, dateString) = try resolveDailyNote(on: start, settings: settings)
         let end = start.addingTimeInterval(TimeInterval(minutes) * 60)
         let bullet = "- \(Self.timeFormatter.string(from: start))–\(Self.timeFormatter.string(from: end)) "
             + "\(CaptureEscaping.sanitizeLine(name)) (\(minutes) min) "
             + "[start:: \(Self.isoFormatter.string(from: start))] [minutes:: \(minutes)]"
-        try insert(bullet: bullet, underHeading: settings.focusHeading, into: noteURL)
+        try insert(bullet: bullet, underHeading: settings.focusHeading, into: noteURL,
+                   seed: Self.seed(root: root, day: start, title: dateString, settings: settings))
         return noteURL
     }
 
-    /// Resolve the vault root and today's daily-note path, checking the note
-    /// doesn't escape the vault. Shared by every writer in this type.
-    private func resolveDailyNote(settings: UserSettings) throws -> (note: URL, root: URL) {
+    /// The content a daily note that doesn't exist yet is created with: the
+    /// vault's own daily template, rendered for that day (see
+    /// `DailyNoteTemplate`). Empty when the vault has no template — then the
+    /// note is built out of the heading and the bullet alone, as it always was.
+    private static func seed(root: URL, day: Date, title: String, settings: UserSettings) -> () -> String {
+        { DailyNoteTemplate.seed(root: root, dailyFolder: settings.dailyFolder, date: day, title: title) ?? "" }
+    }
+
+    /// Resolve the vault root and the path of `day`'s daily note, checking the
+    /// note doesn't escape the vault. Shared by every writer in this type; the
+    /// returned name is also the note's title for template rendering.
+    private func resolveDailyNote(on day: Date, settings: UserSettings) throws
+        -> (note: URL, root: URL, name: String) {
         guard let bookmark = settings.vaultBookmark,
               let root = Persistence.resolveBookmark(bookmark) else {
             throw CaptureError.noVault
         }
 
-        let dateString = dailyFormatter(settings.dailyFormat).string(from: Date())
+        let dateString = dailyFormatter(settings.dailyFormat).string(from: day)
         let noteURL = root
             .appendingPathComponent(settings.dailyFolder, isDirectory: true)
             .appendingPathComponent(dateString + ".md")
@@ -60,13 +77,19 @@ struct ObsidianVault {
         guard CaptureEscaping.isInside(noteURL, root: root) else {
             throw CaptureError.outsideVault
         }
-        return (noteURL, root)
+        return (noteURL, root, dateString)
     }
 
     /// Insert `bullet` under `heading` in the note at `noteURL`, creating
-    /// intermediate folders as needed.
-    private func insert(bullet: String, underHeading heading: String, into noteURL: URL) throws {
-        let existing = (try? String(contentsOf: noteURL, encoding: .utf8)) ?? ""
+    /// intermediate folders as needed. A note that isn't there yet is built from
+    /// `seed` first — writing the day's first capture must not cost the user the
+    /// daily template, since a file that exists is a file Obsidian will never
+    /// template again.
+    private func insert(bullet: String, underHeading heading: String, into noteURL: URL,
+                        seed: () -> String) throws {
+        let stored = try? String(contentsOf: noteURL, encoding: .utf8)
+        let isBlank = stored?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
+        let existing = isBlank ? seed() : (stored ?? "")
         let updated = Self.appending(bullet: bullet, underHeading: heading, to: existing)
         do {
             try FileManager.default.createDirectory(

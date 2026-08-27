@@ -23,4 +23,12 @@ final class NotchPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Take the frame as given. AppKit otherwise keeps a window's top edge
+    /// clear of the menu bar, which for this panel means every attempt to carry
+    /// it away from the top edge is silently pinned back — the island moved
+    /// sideways and refused to go down at all.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
 }

@@ -90,6 +90,87 @@ final class ObsidianCaptureIntegrationTests: XCTestCase {
         XCTAssertTrue(idea.upperBound < plan.lowerBound)
     }
 
+    /// The reported bug: capturing (or logging a focus session) before the day's
+    /// note exists used to create it bare — heading and bullet, no frontmatter,
+    /// no template — and Obsidian never templates a file that already exists.
+    func testCaptureCreatesTheDailyNoteFromTheVaultTemplate() throws {
+        try writeDailyTemplate("""
+        ---
+        type: daily
+        created: <% tp.date.now("YYYY-MM-DD", 0, tp.file.title, "YYYY-MM-DD") %>
+        gym: false
+        ---
+
+        # <% tp.file.title %>
+
+        ## 📥 Capture
+
+        -
+
+        ## 🌙 Plan für morgen
+
+        -
+        """)
+
+        let url = try ObsidianVault().append(text: "idea", asLink: false, settings: settings)
+        let content = try String(contentsOf: url, encoding: .utf8)
+        let today = todayNoteURL().deletingPathExtension().lastPathComponent
+
+        XCTAssertTrue(content.hasPrefix("---\ntype: daily\n"), "frontmatter must lead the note")
+        XCTAssertTrue(content.contains("created: \(today)"))
+        XCTAssertTrue(content.contains("gym: false"))
+        XCTAssertTrue(content.contains("# \(today)"))
+        XCTAssertTrue(content.contains("## 🌙 Plan für morgen"))
+        XCTAssertFalse(content.contains("<%"), "no Templater expression may survive")
+        // The capture reuses the template's placeholder bullet instead of
+        // stacking a second one under the heading.
+        XCTAssertTrue(content.contains("- idea"))
+        XCTAssertEqual(content.components(separatedBy: "## 📥 Capture").count, 2)
+    }
+
+    func testFocusSessionAlsoCreatesTheNoteFromTheTemplate() throws {
+        try writeDailyTemplate("---\ntype: daily\n---\n\n# <% tp.file.title %>\n")
+        let url = try ObsidianVault().appendFocusSession(
+            name: "Fokus", start: Date(), minutes: 25, settings: settings)
+        let content = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(content.hasPrefix("---\ntype: daily\n"))
+        XCTAssertTrue(content.contains(settings.focusHeading))
+        XCTAssertTrue(content.contains("(25 min)"))
+    }
+
+    /// A block worked through midnight belongs to the evening it started, not to
+    /// the morning it happened to end in — otherwise the note for a day you have
+    /// not lived yet opens with "23:50–00:15".
+    func testFocusSessionIsFiledUnderTheDayItStarted() throws {
+        let yesterday = Date().addingTimeInterval(-26 * 3600)
+        let url = try ObsidianVault().appendFocusSession(
+            name: "Fokus", start: yesterday, minutes: 25, settings: settings)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        XCTAssertEqual(url.lastPathComponent, formatter.string(from: yesterday) + ".md")
+        XCTAssertNotEqual(url.lastPathComponent, todayNoteURL().lastPathComponent)
+    }
+
+    /// A vault without a template keeps the old behaviour: better a bare note
+    /// than a lost capture.
+    func testCaptureStillWritesWhenTheVaultHasNoTemplate() throws {
+        let url = try ObsidianVault().append(text: "idea", asLink: false, settings: settings)
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("- idea"))
+    }
+
+    private func writeDailyTemplate(_ body: String) throws {
+        let config = vaultRoot.appendingPathComponent(".obsidian/plugins/templater-obsidian/data.json")
+        try FileManager.default.createDirectory(
+            at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"enable_folder_templates":true,"folder_templates":[{"folder":"daily","template":"_templates/daily.md"}]}"#.utf8)
+            .write(to: config)
+        let template = vaultRoot.appendingPathComponent("_templates/daily.md")
+        try FileManager.default.createDirectory(
+            at: template.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(body.utf8).write(to: template)
+    }
+
     func testTimestampPrefixWhenEnabled() throws {
         settings.captureTimestamp = true
         let url = try ObsidianVault().append(text: "stamped", asLink: false, settings: settings)

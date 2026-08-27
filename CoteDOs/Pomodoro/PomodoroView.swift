@@ -6,6 +6,11 @@ import SwiftUI
 struct PomodoroView: View {
     @ObservedObject var pomodoro: PomodoroManager
     @ObservedObject private var settings = UserSettings.shared
+    /// True on a side border: the chips run down the page instead of across
+    /// it. Three German preset names come to ~330 pt in a row, which a ~200 pt
+    /// column can only scroll — two chips visible and the third cut off at the
+    /// edge. Stacked they all fit, and they use height the page has spare.
+    var portrait: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,11 +36,19 @@ struct PomodoroView: View {
 
     // MARK: Preset chips
 
-    private var presetChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+    @ViewBuilder private var presetChips: some View {
+        if portrait {
+            VStack(spacing: 6) {
                 ForEach(settings.timerPresets) { preset in
-                    chip(for: preset)
+                    chip(for: preset).frame(maxWidth: .infinity)
+                }
+            }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(settings.timerPresets) { preset in
+                        chip(for: preset)
+                    }
                 }
             }
         }
@@ -54,6 +67,9 @@ struct PomodoroView: View {
                 .lineLimit(1)
                 .padding(.vertical, 4)
                 .padding(.horizontal, 10)
+                // Stacked, the capsules line up on both edges — chips of
+                // three different widths in a column read as a ragged list.
+                .frame(maxWidth: portrait ? .infinity : nil)
                 .background(Capsule().fill(Color.white.opacity(isSelected ? 0.22 : 0.08)))
                 .foregroundStyle(.white.opacity(isSelected ? 1 : 0.7))
         }

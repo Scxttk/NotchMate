@@ -247,4 +247,29 @@ final class ArtworkColorTests: XCTestCase {
         XCTAssertLessThanOrEqual(spread, 0.25,
             "yellow and purple bars must sit at one light level, not two (brightnesses \(brightnesses))")
     }
+
+    /// The same seam, in hue rather than in light: a cover split down the middle
+    /// used to draw its left half in one colour and its right half in another,
+    /// which read as two waves stuck together rather than as one.
+    func testASplitCoverDrawsOneColourFamilyRatherThanTwoHalves() throws {
+        let data = try pngCover { ctx in
+            ctx.setFillColor(CGColor(red: 0.20, green: 0.65, blue: 0.28, alpha: 1))   // green
+            ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 64))
+            ctx.setFillColor(CGColor(red: 0.52, green: 0.20, blue: 0.72, alpha: 1))   // purple
+            ctx.fill(CGRect(x: 32, y: 0, width: 32, height: 64))
+        }
+        let palette = try XCTUnwrap(ArtworkColor.barPalette(from: data))
+        for count in [6, 19, 32] {
+            let hues = try (0..<count).map { index -> CGFloat in
+                try hsb(XCTUnwrap(palette.bar(forBarAt: index, total: count)).top).hue
+            }
+            // Widest gap between any two bars, the short way round the circle.
+            let spread = hues.flatMap { a in hues.map { b -> CGFloat in
+                let d = abs(a - b)
+                return min(d, 1 - d)
+            } }.max() ?? 0
+            XCTAssertLessThanOrEqual(spread, 45.0 / 360,
+                "at \(count) bars the row spans \(spread * 360)° of hue — that is a seam, not a family")
+        }
+    }
 }

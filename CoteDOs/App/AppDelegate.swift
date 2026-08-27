@@ -50,9 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.show()
         windowController = controller
 
-        statusBarController = StatusBarController(onToggleNotch: { [weak self] in
-            self?.toggleNotchPaused() ?? false
-        })
+        statusBarController = StatusBarController(
+            onToggleNotch: { [weak self] in self?.toggleNotchPaused() ?? false },
+            isNotchPlaced: { [weak self] in self?.windowController?.isPlacedByUser ?? false },
+            onResetPlacement: { [weak self] in self?.windowController?.resetPlacement() }
+        )
 
         // ⌥⌘N pauses/resumes the whole notch from anywhere. Born from needing
         // to hover/click the exact spot the notch occupies — until now the only
@@ -100,6 +102,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(resetData),
             name: .notchMateResetData,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(resetNotchPlacement),
+            name: .notchResetPlacement,
             object: nil
         )
         registerSleepWakeObservers()
@@ -195,6 +203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let disabled = !(windowController?.isUserDisabled ?? false)
         windowController?.setUserDisabled(disabled)
         return disabled
+    }
+
+    @objc private func resetNotchPlacement() {
+        windowController?.resetPlacement()
     }
 
     @objc private func resetData() {

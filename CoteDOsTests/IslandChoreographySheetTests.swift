@@ -74,6 +74,7 @@ final class IslandChoreographySheetTests: XCTestCase {
         static let expandHop = (response: 0.30, damping: 0.75)      // islandExpandAnimation
         static let expandFinal = (response: 0.42, damping: 0.70)    // islandExpandFinalAnimation
         static let collapseHop = (response: 0.55, damping: 1.0)     // islandCollapseAnimation
+        static let tabCondense = (response: 0.28, damping: 1.0)     // tabCondenseAnimation
     }
 
     // MARK: Walk simulation
@@ -120,7 +121,7 @@ final class IslandChoreographySheetTests: XCTestCase {
         switch state {
         case .expanded:   width = viewModel.expandedWidth; shift = 0
         case .band:       width = NotchLayout.bandWidth; shift = 0
-        case .solo:       width = hero ? pillWidth : viewModel.soloWidth(for: .music); shift = pillShift
+        case .solo:       width = hero ? pillWidth : viewModel.soloWidth; shift = pillShift
         case .condensing: width = pillWidth; shift = pillShift
         case .collapsed:  width = pillWidth; shift = pillShift
         }
@@ -246,20 +247,19 @@ final class IslandChoreographySheetTests: XCTestCase {
         t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t)
     }
 
-    /// The selected icon's flight from the capsule centre to its slot: driven
-    /// by the band hop's spring, retargeted by the final hop — same solver as
-    /// the silhouette.
-    private func flightCurve(bandTime: Double, expandedTime: Double, duration: Double) -> [Double] {
+    /// The selected icon's flight from the capsule centre out to its slot. The
+    /// row rejoins the layout at `.band` and travels on its own clock
+    /// (`tabCondenseAnimation`), independent of the hop springs the silhouette
+    /// rides — same solver, different curve.
+    private func flightCurve(bandTime: Double, duration: Double) -> [Double] {
         var track = SpringTrack(at: 0)
         let dt = 1.0 / 240.0
         var values: [Double] = []
         var t = 0.0
         while t <= duration {
             if abs(t - bandTime) < dt / 2 {
-                track.retarget(0.8, response: Curve.expandHop.response, dampingFraction: Curve.expandHop.damping)
-            }
-            if abs(t - expandedTime) < dt / 2 {
-                track.retarget(1.0, response: Curve.expandFinal.response, dampingFraction: Curve.expandFinal.damping)
+                track.retarget(1.0, response: Curve.tabCondense.response,
+                               dampingFraction: Curve.tabCondense.damping)
             }
             values.append(track.value)
             track.step(dt)
@@ -290,7 +290,7 @@ final class IslandChoreographySheetTests: XCTestCase {
         // Idle: pill icon hands over to the (identical) tab icon via a hard
         // cut at walk start, the tab icon flies to its slot, and the other
         // tabs join once the flight is home.
-        let flight = flightCurve(bandTime: bandTime, expandedTime: expandedTime, duration: duration)
+        let flight = flightCurve(bandTime: bandTime, duration: duration)
         let joinStart = bandTime + NotchLayout.tabJoinFadeDelay
         let joinFade = 0.15  // condenseFadeAnimation
         return [
@@ -654,6 +654,47 @@ final class IslandChoreographySheetTests: XCTestCase {
         try summary.write(
             to: Self.outputDirectory.appendingPathComponent("summary.txt"),
             atomically: true, encoding: .utf8)
+    }
+
+    /// Closing the island must take the same time whatever the pill happens to
+    /// hold. It did not: the swap rest is skipped for hero content, so with
+    /// anything audible the walk ran 0.36 s and in silence 0.94 s — the same
+    /// gesture, two and a half times the duration, and nothing on screen to
+    /// explain which one you were going to get.
+    func testCollapseLastsTheSameWhateverThePillHolds() throws {
+        let viewModel = NotchViewModel()
+        let idle = walkEvents(expanding: false, viewModel: viewModel, hero: false)
+        let hero = walkEvents(expanding: false, viewModel: viewModel, hero: true)
+        let idleEnd = try XCTUnwrap(idle.last?.time)
+        let heroEnd = try XCTUnwrap(hero.last?.time)
+        XCTAssertEqual(idleEnd, heroEnd, accuracy: 0.2,
+            "collapse duration must not depend on whether audio happens to be playing")
+    }
+
+    /// …and the glyph has to be home by then, because the pill handover is a
+    /// hard cut. This is what the long swap rest used to buy; the row's own
+    /// animation buys it in a third of the time.
+    func testSelectedGlyphIsHomeWhenThePillTakesOver() throws {
+        let viewModel = NotchViewModel()
+        let events = walkEvents(expanding: false, viewModel: viewModel, hero: false)
+        let soloTime = try XCTUnwrap(events.first { $0.state == .solo }?.time)
+        let swapTime = try XCTUnwrap(events.first { $0.state == .collapsed }?.time)
+
+        // Worst case: the outermost tab of five, two slots off centre.
+        let travel = 2 * Double(NotchLayout.tabItemWidth + NotchLayout.tabBarSpacing)
+        var glyph = SpringTrack(at: travel)
+        let dt = 1.0 / 480.0
+        var t = 0.0
+        while t < swapTime {
+            if abs(t - soloTime) < dt / 2 {
+                glyph.retarget(0, response: Curve.tabCondense.response,
+                               dampingFraction: Curve.tabCondense.damping)
+            }
+            glyph.step(dt)
+            t += dt
+        }
+        XCTAssertLessThan(abs(glyph.value), 0.5,
+            "the condensed glyph is \(glyph.value) pt off centre at the swap — a visible terminal hop")
     }
 
     /// Hero + timer: the asymmetric pill. The frame shifts right so the hero

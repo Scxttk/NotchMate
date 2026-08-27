@@ -5,6 +5,9 @@ import SwiftUI
 /// connect). Uses a CoreAudio property listener — no polling.
 final class AudioRouteActivityProvider {
     var onActivity: ((NotchActivity) -> Void)?
+    /// Asked on every route change so a switched-off pill costs nothing beyond
+    /// the listener itself — no name lookup, no `system_profiler` battery call.
+    var isEnabled: (() -> Bool)?
 
     private var lastDeviceID: AudioDeviceID = 0
     private var listener: AudioPropertyListener?
@@ -31,7 +34,10 @@ final class AudioRouteActivityProvider {
     private func handleChange() {
         let device = currentOutputDevice()
         guard device != 0, device != lastDeviceID else { return }
+        // Still remember the device while switched off, so turning the pill back
+        // on doesn't announce a route that changed minutes ago.
         lastDeviceID = device
+        guard isEnabled?() ?? true else { return }
 
         let name = deviceName(device)
         let isAirPods = name.localizedCaseInsensitiveContains("AirPods")

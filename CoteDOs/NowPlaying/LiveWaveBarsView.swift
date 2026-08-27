@@ -26,6 +26,8 @@ struct LiveWaveBarsView: View {
     var morphScale: CGFloat = 1
     /// See `WaveBarsView.morphAnimation`.
     var morphAnimation: Animation = NotchLayout.islandMorphAnimation
+    /// See `WaveCanvas.axis`.
+    var axis: Axis = .horizontal
 
     var body: some View {
         WaveBarsView(
@@ -38,7 +40,8 @@ struct LiveWaveBarsView: View {
             barWidth: barWidth,
             spacing: spacing,
             morphScale: morphScale,
-            morphAnimation: morphAnimation
+            morphAnimation: morphAnimation,
+            axis: axis
         )
     }
 }

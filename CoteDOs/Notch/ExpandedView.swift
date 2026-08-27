@@ -40,42 +40,95 @@ struct ExpandedView: View {
     /// materialises into a nearly still island.
     private var showsPages: Bool { viewModel.islandState == .expanded && viewModel.pagesSettled }
 
-    var body: some View {
-        VStack(spacing: showsPages ? NotchLayout.expandedRowSpacing : 0) {
-            // The tab bar occupies exactly the collapsed pill's band (flush top,
-            // same height), so its icons sit on the same y as the pill's glyph —
-            // the hero flight between them is purely horizontal, not diagonal.
-            NotchTabBar(
-                selection: $viewModel.selectedTab,
-                // .band/.expanded keep every tab; .solo/.condensing keep only the
-                // selected one, so the capsule can narrow onto it.
-                showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band,
-                isOpen: viewModel.islandState == .expanded
-            )
-            .frame(maxWidth: .infinity)
-            // The pill's own band, at every stage — that is what puts the tab
-            // glyphs on exactly the y the pill's glyph occupies, which is the
-            // whole premise of the hard-cut handover. The open island's
-            // breathing room is padding *outside* the band, so it moves the
-            // band down without ever resizing it.
-            .frame(height: NotchLayout.currentCollapsedHeight)
-            .padding(.top, viewModel.islandState == .expanded ? NotchLayout.tabBarTopInset : 0)
-            // No opacity gate on the row: the selected glyph is the pill's
-            // glyph, still on screen, and the opening is the collapse played
-            // backwards. It glides from the capsule's centre out to its slot —
-            // 88 pt, if you were on Musik — while its neighbours fade in behind
-            // it (`tabJoinFadeDelay`). Hiding the row for that move and fading
-            // it back afterwards is what made the icon read as flying away
-            // rather than travelling somewhere.
+    /// The border the island is parked on — everything below is laid out along
+    /// it, and mirrored end for end so the tab band always hugs it.
+    private var dock: NotchDock { viewModel.placement.dock }
 
-            // The pages live in a carousel that slides as one strip. Unlike
-            // insertion/removal transitions this can't get the direction wrong on
-            // quick back-and-forth swipes — the offset is a pure function of the
-            // selected index.
+    var body: some View {
+        AxisStack(axis: dock.isHorizontal ? .vertical : .horizontal,
+                  spacing: showsPages ? NotchLayout.expandedRowSpacing : 0) {
+            if dock.bandLeads { tabBar }
+            carousel
+            if !dock.bandLeads { tabBar }
+        }
+        // Inset the content (and the carousel clip in particular) from the
+        // island edge so it clears the rounded corners; sliding pages must not
+        // poke past the dark body onto the wallpaper. Along the border, since
+        // that is the direction the pages travel in.
+        .padding(dock.isHorizontal ? .horizontal : .vertical, NotchLayout.expandedContentInset)
+        // Breathing room at the *far* edge from the border — the open end.
+        .padding(farEdge, showsPages ? NotchLayout.expandedBottomPadding : 0)
+        .foregroundStyle(.white)
+    }
+
+    /// The island's open end: the edge opposite the one it is docked to.
+    private var farEdge: Edge.Set {
+        switch dock {
+        case .top: return .bottom
+        case .bottom: return .top
+        case .leading: return .trailing
+        case .trailing: return .leading
+        }
+    }
+
+    @ViewBuilder private var tabBar: some View {
+        // The tab bar occupies exactly the collapsed pill's band (flush against
+        // the border, same thickness), so its icons sit on the same line as the
+        // pill's glyph — the hero flight between them runs along the border,
+        // never diagonally.
+        NotchTabBar(
+            selection: $viewModel.selectedTab,
+            // .band/.expanded keep every tab; .solo/.condensing keep only the
+            // selected one, so the capsule can narrow onto it.
+            showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band,
+            isOpen: viewModel.islandState == .expanded,
+            dock: dock
+        )
+        .frame(maxWidth: dock.isHorizontal ? .infinity : nil,
+               maxHeight: dock.isHorizontal ? nil : .infinity)
+        // The pill's own band, at every stage — that is what puts the tab
+        // glyphs exactly where the pill's glyph sits, which is the whole
+        // premise of the hard-cut handover. The open island's breathing room
+        // is padding *outside* the band, so it moves the band inward without
+        // ever resizing it.
+        .frame(width: dock.isHorizontal ? nil : NotchLayout.currentCollapsedHeight,
+               height: dock.isHorizontal ? NotchLayout.currentCollapsedHeight : nil)
+        // Breathing room between the border and the row. On the border side at
+        // every dock: it is the gap the island's edge leaves, not a top margin.
+        .padding(borderEdge, viewModel.islandState == .expanded ? NotchLayout.tabBarTopInset : 0)
+        // No opacity gate on the row: the selected glyph is the pill's
+        // glyph, still on screen, and the opening is the collapse played
+        // backwards. It glides from the capsule's centre out to its slot —
+        // 88 pt, if you were on Musik — while its neighbours fade in behind
+        // it (`tabJoinFadeDelay`). Hiding the row for that move and fading
+        // it back afterwards is what made the icon read as flying away
+        // rather than travelling somewhere.
+    }
+
+    /// The edge the island is docked against.
+    private var borderEdge: Edge.Set {
+        switch dock {
+        case .top: return .top
+        case .bottom: return .bottom
+        case .leading: return .leading
+        case .trailing: return .trailing
+        }
+    }
+
+    // The pages live in a carousel that slides as one strip. Unlike
+    // insertion/removal transitions this can't get the direction wrong on
+    // quick back-and-forth swipes — the offset is a pure function of the
+    // selected index. The strip runs along the border, so on a side dock the
+    // pages stack downward and slide vertically, in the same direction the tab
+    // column reads.
+    @ViewBuilder private var carousel: some View {
             if showsPages {
                 GeometryReader { geo in
-                    HStack(spacing: 0) {
-                        page(.music, in: geo.size) { NowPlayingView(nowPlaying: nowPlaying, spectrum: spectrum) }
+                    AxisStack(axis: dock.isHorizontal ? .horizontal : .vertical, spacing: 0) {
+                        page(.music, in: geo.size) {
+                            NowPlayingView(nowPlaying: nowPlaying, spectrum: spectrum,
+                                           portrait: !dock.isHorizontal)
+                        }
                         page(.spectrum, in: geo.size) {
                             // The whole page is the wave. Colours follow
                             // whichever app is making the sound — the track's
@@ -96,7 +149,11 @@ struct ExpandedView: View {
                                 isActive: nowPlaying.screensAwake,
                                 tint: tints.primary,
                                 coverBars: tints.coverBars,
-                                fixedBarCount: spectrumWaveBarCount
+                                fixedBarCount: spectrumWaveBarCount,
+                                // Standing on a side border, the run stands up
+                                // with the island: bars stacked down the page,
+                                // growing out of the edge.
+                                axis: dock.isHorizontal ? .horizontal : .vertical
                             )
                             }
                         }
@@ -112,21 +169,17 @@ struct ExpandedView: View {
                         .onTapGesture { SpectrumFullscreen.shared.present() }
                         page(.files, in: geo.size) { ShelfView(shelf: shelf) }
                         page(.capture, in: geo.size) { CaptureView(capture: capture, viewModel: viewModel) }
-                        page(.timer, in: geo.size) { PomodoroView(pomodoro: pomodoro) }
+                        page(.timer, in: geo.size) {
+                            PomodoroView(pomodoro: pomodoro, portrait: !dock.isHorizontal)
+                        }
                     }
-                    .offset(x: -CGFloat(pageIndex) * geo.size.width)
+                    .offset(x: dock.isHorizontal ? -CGFloat(pageIndex) * geo.size.width : 0,
+                            y: dock.isHorizontal ? 0 : -CGFloat(pageIndex) * geo.size.height)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .transition(.notchContent)
             }
-        }
-        // Inset the content (and the carousel clip in particular) from the
-        // island edge so it clears the rounded corners; sliding pages must not
-        // poke past the dark body onto the wallpaper.
-        .padding(.horizontal, NotchLayout.expandedContentInset)
-        .padding(.bottom, showsPages ? NotchLayout.expandedBottomPadding : 0)
-        .foregroundStyle(.white)
     }
 
     @ViewBuilder

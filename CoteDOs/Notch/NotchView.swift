@@ -47,12 +47,23 @@ struct NotchRootView: View {
         nowPlaying.isPlaying || spectrum.hasSignal
     }
 
-    private var islandWidth: CGFloat {
+    private var dock: NotchDock { viewModel.placement.dock }
+
+    /// The island's silhouette for the current state, as a size on the border
+    /// it is on. Every case below is a *length* along that border — the
+    /// thickness is the pill's own band, except when the island is open.
+    private var islandSize: CGSize {
+        viewModel.islandState == .expanded
+            ? viewModel.expandedIslandSize
+            : dock.size(length: islandLength, thickness: viewModel.collapsedHeight)
+    }
+
+    private var islandLength: CGFloat {
         switch viewModel.islandState {
         case .expanded:
-            return viewModel.expandedWidth
+            return dock.lengthAndThickness(of: viewModel.expandedIslandSize).length
         case .band:
-            return NotchLayout.bandWidth
+            return NotchLayout.bandLength(on: dock)
         case .solo:
             // Playing or timing: the pill hero (cover + spectrum and/or timer
             // readout) has already taken over, so the capsule is pill-width —
@@ -61,20 +72,19 @@ struct NotchRootView: View {
                 return viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
             }
             // Otherwise hug the single surviving tab group (selected icon + label).
-            return viewModel.soloWidth(for: viewModel.selectedTab)
+            return viewModel.soloWidth
         case .condensing:
             // Already the pill's width: the capsule narrows onto the selected
             // icon during this stage, so the final swap changes nothing.
             return viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
         case .collapsed:
             if let activity = activities.current {
-                return activity.kind == .audioRoute ? NotchLayout.activityRouteWidth : NotchLayout.activityWidth
+                return NotchLayout.activityLength(isRoute: activity.kind == .audioRoute,
+                                                  hasProgress: activity.progress != nil,
+                                                  on: dock)
             }
             return viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
         }
-    }
-    private var islandHeight: CGFloat {
-        viewModel.isExpanded ? viewModel.expandedHeight : viewModel.collapsedHeight
     }
 
     /// Horizontal shift of the island *frame* off screen centre: with the audio
@@ -86,6 +96,10 @@ struct NotchRootView: View {
     /// changes inside the very same `withAnimation` transactions as the width,
     /// so it rides the staged walk's tuned springs.
     private var islandXOffset: CGFloat {
+        // Only at home: the shift exists to keep the hero core on the screen's
+        // centre line, where the physical notch is. Parked on a border it would
+        // just be an off-centre capsule.
+        guard viewModel.placement.isHome else { return 0 }
         switch viewModel.islandState {
         case .expanded, .band:
             return 0
@@ -95,14 +109,81 @@ struct NotchRootView: View {
         }
     }
 
+    /// Which corner of the panel the island is pinned to — the docked border.
+    /// Pinned there and free at the opposite side, so opening it grows the
+    /// island *inward* instead of off the screen edge it is glued to. Mirrored
+    /// in AppKit by `NotchPlacement.islandRect(inPanel:size:gap:shift:)`, which
+    /// is what the hit and hover rects are built from.
+    /// Where the island sits inside the panel: against its border, and — in a
+    /// corner — against that end of it too. The AppKit mirror of this is
+    /// `NotchPlacement.islandRect(inPanel:size:gap:shift:)`, and the two must
+    /// agree or the island is drawn somewhere the cursor rects aren't.
+    private var dockAlignment: Alignment {
+        let placement = viewModel.placement
+        switch placement.dock {
+        case .top, .bottom:
+            let vertical: VerticalAlignment = placement.dock == .top ? .top : .bottom
+            switch placement.anchor {
+            case .start:  return Alignment(horizontal: .leading, vertical: vertical)
+            case .end:    return Alignment(horizontal: .trailing, vertical: vertical)
+            case .centre: return Alignment(horizontal: .center, vertical: vertical)
+            }
+        case .leading, .trailing:
+            let horizontal: HorizontalAlignment = placement.dock == .leading ? .leading : .trailing
+            switch placement.anchor {
+            // A vertical border runs downward, so its start is the top.
+            case .start:  return Alignment(horizontal: horizontal, vertical: .top)
+            case .end:    return Alignment(horizontal: horizontal, vertical: .bottom)
+            case .centre: return Alignment(horizontal: horizontal, vertical: .center)
+            }
+        }
+    }
+
+    /// The island's *own* alignment: against its border, centred along it.
+    ///
+    /// Deliberately corner-blind, unlike `dockAlignment`. A corner decides
+    /// where the island sits inside the panel; inside the island everything
+    /// still runs from the middle out. Handing the corner down here pinned the
+    /// travelling wave's page-sized frame to one end and left the shrunken run
+    /// hanging off the side of the pill.
+    private var borderAlignment: Alignment {
+        switch viewModel.placement.dock {
+        case .top: return .top
+        case .bottom: return .bottom
+        case .leading: return .leading
+        case .trailing: return .trailing
+        }
+    }
+
+    /// The edges the island floats `islandTopGap` off: its border always, plus
+    /// the end of that border when it is parked in a corner.
+    private var dockEdge: Edge.Set {
+        let placement = viewModel.placement
+        var edges: Edge.Set
+        switch placement.dock {
+        case .top: edges = .top
+        case .bottom: edges = .bottom
+        case .leading: edges = .leading
+        case .trailing: edges = .trailing
+        }
+        switch (placement.dock.isHorizontal, placement.anchor) {
+        case (_, .centre): break
+        case (true, .start): edges.insert(.leading)
+        case (true, .end): edges.insert(.trailing)
+        case (false, .start): edges.insert(.top)
+        case (false, .end): edges.insert(.bottom)
+        }
+        return edges
+    }
+
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: dockAlignment) {
             Color.clear
             island
-                // The island floats detached below the screen edge, iPhone-style.
-                .padding(.top, NotchLayout.islandTopGap)
+                // The island floats detached off the screen edge, iPhone-style.
+                .padding(dockEdge, NotchLayout.islandTopGap)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: dockAlignment)
         .onAppear { syncSpectrum() }
         .onChange(of: nowPlaying.isPlaying) { _, playing in
             // Deliberately does *not* switch to the music tab any more. The
@@ -129,9 +210,17 @@ struct NotchRootView: View {
     /// shelf badge beside it the run is no longer centred in the capsule, and
     /// an overlay would have to re-derive an offset the `HStack` already owns.
     /// Those cases keep the plain crossfade, which is correct if less pretty.
+    /// Only at the top border, and that is the whole of the reason: every
+    /// number behind the flight — `pillWaveCentreY`, `pageWaveCentreY`, the
+    /// scale between them — is measured from an island hanging off the top
+    /// edge. The other three borders mirror or transpose that, and a run that
+    /// travels to the wrong place is worse than one that simply crosses over.
+    /// So they take the plain crossfade, which is the same fallback a timer
+    /// readout or a shelf badge in the pill already takes.
     private var morphingWaveActive: Bool {
         settings.pillSpectrumOnly && hasAudioHero
             && pomodoro.pillText == nil && shelf.items.isEmpty
+            && dock == .top
     }
 
     /// Whether a live activity (volume/brightness HUD, audio route, battery)
@@ -307,9 +396,10 @@ struct NotchRootView: View {
         .drawingGroup()
         .padding(-40)
 
+        let size = islandSize
         return chrome
             .overlay(
-                ZStack(alignment: .top) {
+                ZStack(alignment: borderAlignment) {
                     content
                     // The spectrum lives *above* the island's content rather
                     // than inside it, so that opening the island moves one wave
@@ -326,10 +416,10 @@ struct NotchRootView: View {
                         morphingWave.transition(.asymmetric(insertion: .opacity, removal: waveExitTransition))
                     }
                 }
-                .frame(width: islandWidth, height: islandHeight, alignment: .top)
+                .frame(width: size.width, height: size.height, alignment: borderAlignment)
                 .clipShape(shape)
             )
-            .frame(width: islandWidth, height: islandHeight)
+            .frame(width: size.width, height: size.height)
             .offset(x: islandXOffset)
             // Settings changes alter the pill's width formula outside the
             // staged walk's withAnimation calls; morph instead of snapping.
@@ -368,8 +458,9 @@ struct NotchRootView: View {
         let handover: AnyTransition = heroContent ? .heroCrossfade : .iconHandover
 
         // Two explicit layers so the collapsed pill is *always* on top of the
-        // outgoing tab bar during the handover.
-        ZStack(alignment: .top) {
+        // outgoing tab bar during the handover — both pinned to the border, so
+        // the handover happens in place on every one of them.
+        ZStack(alignment: borderAlignment) {
             if showsExpanded {
                 // Expanded through condensing: the tab bar is one persistent
                 // view that sheds its parts itself (pages, then unselected
@@ -381,7 +472,7 @@ struct NotchRootView: View {
             }
             if state == .collapsed || pillHero {
                 if state == .collapsed, let activity = activities.current {
-                    ActivityCompactView(activity: activity)
+                    ActivityCompactView(activity: activity, dock: dock)
                         .foregroundStyle(.white)
                         .transition(.notchContent)
                 } else {

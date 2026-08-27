@@ -42,12 +42,24 @@ struct SpectrumStageView: View {
     /// `NotchLayout.spectrumFullscreenMorphAnimation` because it covers several
     /// times the distance and needs longer to do it.
     var morphAnimation: Animation = NotchLayout.islandMorphAnimation
+    /// Which way the run reads — see `WaveCanvas.axis`. The geometry rule is
+    /// the same either way, so a vertical stage simply resolves it against the
+    /// transposed field: bar thickness from the stage's *width*, and as many
+    /// bars as fit its height.
+    var axis: Axis = .horizontal
 
     private var origin: WaveMorphOrigin { landed ? .identity : (morphOrigin ?? .identity) }
 
     var body: some View {
         GeometryReader { geo in
-            let stage = NotchLayout.stageWaveGeometry(in: geo.size, barCount: fixedBarCount)
+            let field = axis == .horizontal
+                ? geo.size
+                : CGSize(width: geo.size.height, height: geo.size.width)
+            let stage = NotchLayout.stageWaveGeometry(
+                in: field, barCount: fixedBarCount,
+                fieldAspect: axis == .horizontal
+                    ? NotchLayout.pillSpectrumFieldAspect
+                    : NotchLayout.portraitStageFieldAspect)
             WaveBarsView(
                 isActive: isActive,
                 tint: tint,
@@ -58,7 +70,8 @@ struct SpectrumStageView: View {
                 barWidth: stage.barWidth,
                 spacing: stage.spacing,
                 morphScale: origin.scale,
-                morphAnimation: morphAnimation
+                morphAnimation: morphAnimation,
+                axis: axis
             )
             .frame(width: geo.size.width, height: geo.size.height)
         }

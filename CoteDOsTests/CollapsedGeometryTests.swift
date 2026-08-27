@@ -141,29 +141,17 @@ final class CollapsedGeometryTests: XCTestCase {
 
     // MARK: Tab bar fit
 
-    /// Five tabs' labels come to ~472 pt against the 348 pt the band capsule
-    /// offers, and an `HStack` neither wraps nor truncates — it overflows its
-    /// centre, so the outer labels sit outside the island. Whatever the enabled
-    /// set is, the row has to end up inside it.
+    /// An `HStack` neither wraps nor truncates — it overflows its centre, so a
+    /// row too wide for the band capsule puts its outer tabs outside the island.
+    /// The labelled row needed scaling to fit; the icon-only one has to fit
+    /// outright, at every tab count.
     func testTabRowFitsInsideTheIslandAtEveryTabCount() {
-        let titles = NotchViewModel.Tab.allCases.map(\.title)
-        for count in 1...titles.count {
-            let row = Array(titles.prefix(count))
-            let natural = row.reduce(CGFloat(0)) {
-                $0 + NotchLayout.tabItemWidthEstimate(labelCharacters: $1.count)
-            } + CGFloat(count - 1) * NotchLayout.tabBarSpacing
-            let scaled = natural * NotchLayout.tabBarFitScale(titles: row)
-            XCTAssertLessThanOrEqual(scaled, NotchLayout.tabBarAvailableWidth,
-                                     "\(count) tabs must fit inside the island")
+        let available = NotchLayout.bandWidth - 2 * NotchLayout.expandedContentInset
+        for count in 1...NotchViewModel.Tab.allCases.count {
+            let row = CGFloat(count) * NotchLayout.tabItemWidth
+                + CGFloat(count - 1) * NotchLayout.tabBarSpacing
+            XCTAssertLessThanOrEqual(row, available, "\(count) tabs must fit inside the island")
         }
-    }
-
-    /// The scale is a remedy, not a default: a row that already fits must be
-    /// left alone, or every island would render its tabs subtly shrunk.
-    func testTabRowIsNotScaledWhenItAlreadyFits() {
-        let titles = Array(NotchViewModel.Tab.allCases.prefix(3).map(\.title))
-        XCTAssertEqual(NotchLayout.tabBarFitScale(titles: titles), 1)
-        XCTAssertEqual(NotchLayout.tabBarFitScale(titles: []), 1)
     }
 
     /// Real drawn sizes, because `tabIconSize` has been raised on the strength

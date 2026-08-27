@@ -6,6 +6,62 @@ bundle identifier still is NotchMate, see the README for why).
 ## [Unreleased]
 
 ### Added
+- **The island can be carried to another border.** Press it and pull: the whole
+  panel follows the cursor and lands on the nearest screen edge when you let
+  go — top, bottom, left or right, sliding freely along whichever it picks. It
+  is always on one, the way a picture-in-picture window is; nothing ends up
+  adrift in the middle of the screen. Where it landed survives a relaunch, and
+  it opens *inward* from its edge, so an island parked at the bottom grows
+  upward instead of off the screen.
+  - Released within a hair of an edge's centre it lands exactly centred; on the
+    top edge that is the notch's home pose again. "Notch zurück nach oben" in
+    the status menu does the same from anywhere, and only lights up while the
+    island is somewhere you put it.
+  - Parked off home, the two automatic placements stand down: no Safari-URL-bar
+    dodge and no menu-bar-overlap hide. Both exist to make the pose *at the
+    notch* survive; once you have chosen a spot, moving the island out from
+    under you is the last thing it should do.
+- **On a side border the island stands up.** Not the landscape island turned on
+  its side — a layout of its own. The tab strip becomes a column pinned to the
+  edge, glyphs upright; the spectrum's bars stack down the run and grow out of
+  the border; the pages slide vertically, the way the column reads. The open
+  island is portrait there (300 × 420) rather than a 212 pt-thick sliver, which
+  is what lets the music page keep its cover and its controls.
+  - The band the tab strip lives in always hugs the border, so the island is a
+    mirror of itself rather than the same layout moved: at the bottom the strip
+    is along the bottom edge, and the pill hands its glyph over in place
+    instead of across the island.
+  - The swipes turn with it. Pulling the island out of its border is a swipe
+    away from that border — down at the top, up at the bottom, right at the
+    left edge — and paging between tabs runs *along* the border, so on a side
+    dock you page up and down.
+  - **It goes in a corner too.** Drop it near either end of a border and it
+    pins itself there instead of sliding to the nearest free spot. That needs
+    more than running `along` to its limit: the island is centred in a panel
+    much longer than itself, so a collapsed pill shoved as far as it goes still
+    stopped a third of a screen short of the corner. In a corner the island is
+    pinned to that end of its panel instead. Each screen corner is reachable
+    two ways — from the border above it or the one beside it — and the island
+    lies down or stands up accordingly.
+  - **The proportions were redone.** The portrait island was a straight swap of
+    the landscape one, 420 pt tall, which left every page a small cluster
+    adrift in black. It is 320 × 264 now, sized from what actually has to fit
+    (a 214 pt tab column, 130–200 pt of page content). The music page stacks
+    cover over title over wave rather than crowding them into a row — the cover
+    is half again as big and the title stopped truncating — and the timer's
+    presets stack into a column instead of scrolling off the edge. The
+    spectrum's letterbox got its own ratio for a portrait page, which had been
+    holding the run to half the width it had.
+  - Two things degrade rather than rotate, on purpose. A live activity on a
+    side border shows its glyph and its progress bar but not its words: a
+    device name turned on its side reads as a rendering fault. And the wave
+    that travels from pill to page as one object stays a top-border trick —
+    every number behind that flight is measured from an island hanging off the
+    top edge; elsewhere the pill and the page cross-fade, as they already do
+    with a timer readout in the pill.
+  - "Notch mittig nach oben" is in Settings › Notch as well as the status menu.
+    The status menu is the one surface a mis-placed island can cover, and
+    Settings is where you go looking after regretting a drag.
 - **⌥⌘N pauses the notch.** The panel hides and becomes fully click-through,
   so the exact spot it occupies can be hovered and clicked — until now the
   only way to reach something living under the notch was quitting the app.
@@ -15,6 +71,13 @@ bundle identifier still is NotchMate, see the README for why).
   persisted: a fresh launch always starts with the notch on.
 
 ### Changed
+- **The output-device pill has its own switch.** Connecting AirPods already
+  gets a banner from macOS, so Côte d'OS announcing the same thing a moment
+  later reads as a stutter rather than a feature. "Audio-Ausgabe-Wechsel" in
+  Settings › Notch turns the pill off on its own, without taking charging and
+  the file-received pill with it. It stays on by default — a switch to a
+  speaker or an interface gets no banner from macOS at all. Switched off,
+  the route change costs nothing: no device lookup, no battery readout.
 - **The fullscreen guard is ⌥⌘S only.** 1.5 shipped it as a screen saver as
   well: an untouched Mac with something playing had the screen taken from it
   fifteen seconds before the display would have gone dark, and locked when you
@@ -28,6 +91,56 @@ bundle identifier still is NotchMate, see the README for why).
   - Nothing else changes — the arming, the lock, the note in the pill saying
     what ended the run and when, and the unarmed takeover you get from the
     spectrum tab are all as they were.
+
+### Fixed
+- **Capture no longer costs you the daily template.** Writing the first thing of
+  the day — a capture, or a finished focus timer — into a daily note that did not
+  exist yet created it as a bare file: the heading, the bullet, and nothing else.
+  No frontmatter, so the day dropped out of every Bases view that filters on it,
+  and no way to get the template back either, because Obsidian only templates a
+  note at the moment it creates one. Côte d'OS now reads the vault's own daily
+  template (Templater's folder templates, or the core Daily-notes setting) and
+  fills in the date expressions itself — `tp.date.now` with its offsets,
+  `tp.file.title`, `{{date}}`, and moment formats down to `dddd` in the Mac's
+  language. Anything it cannot evaluate is left standing verbatim rather than
+  guessed at, and a vault with no template behaves exactly as before.
+- **Closing the notch takes the same time whatever is playing.** The last step of
+  the collapse waited half a second for the tab glyph to finish drifting to the
+  centre — but only when the pill had nothing to show, since music, any other
+  system audio or a running timer skipped that wait. So the same gesture closed
+  the island in 0.36 s or in 0.94 s, decided by something inaudible in the room
+  and invisible on screen. The row now gathers on its own quick clock instead of
+  riding the capsule's long one, which is what that wait was for; the capsule
+  keeps settling exactly as calmly as it did.
+- **A live activity no longer jumps the pill open.** With a volume, route or
+  charging pill up, the closing island landed on the activity's width — 220 pt
+  or more against the pill's 50 — in a single unanimated frame. It morphs now,
+  the way an activity arriving and leaving always did. The cursor also reaches
+  the whole of such a pill: hover and clicks were still being tested against the
+  narrow content width, so most of a visible route pill was deaf.
+- **Focus time lands on the day it was worked.** A block running through midnight
+  was logged to the note for the day it *ended*, which opened tomorrow's daily
+  with a `23:50–00:15` entry. It goes to the day it started.
+- **A split cover no longer splits the wave.** A sleeve whose colours sit on
+  opposite sides of the artwork — one half green, the other purple — drew every
+  bar left of centre in the first colour and every bar right of it in the
+  second, with a hard seam down the middle where they met. Each slice was
+  electing its own colour honestly; the run just never had to agree on one.
+  Now the hue the most bars elect sets the family and the rest may lean 20°
+  toward their own, so the sleeve shows up as its colour instead of as a
+  diagram of where that colour sits. Per-bar saturation and brightness are
+  untouched, which is what still makes a run read as *this* cover.
+- **The bars have lost their halo.** Every bar threw its own light, scaled by
+  how loud it was. Measured against the reference it is the wrong instinct: the
+  Dynamic Island's bars have no glow at all, and ours turned the black around
+  the run milky grey — most of what made the colours look dirty.
+- **The wave no longer freezes on screen after the music stops.** Quitting
+  Spotify mid-song, or closing a browser tab that was playing, left the pill
+  open over a motionless spectrum — sometimes for hours, until some app made a
+  sound again. The band levels are written from the audio callback, so a tap
+  torn down while a signal was still being held had nothing left to clear them.
+  The same freeze also kept the ⌥⌘S guard from ever seeing the silence it waits
+  for, so an armed run never ended.
 
 ## [1.5.0] – 2026-07-30
 

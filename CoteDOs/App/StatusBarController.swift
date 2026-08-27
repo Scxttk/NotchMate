@@ -1,16 +1,24 @@
 import AppKit
 import ServiceManagement
 
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSMenuItemValidation {
     private let statusItem: NSStatusItem
     private let settingsWindow = SettingsWindowController()
     /// Flips the notch pause and returns the *new* disabled state. Owned by
     /// the app delegate so the menu item and the ⌥⌘N hotkey share one toggle.
     private let onToggleNotch: () -> Bool
+    /// Whether the island currently sits somewhere the user dragged it — the
+    /// reset item is dead weight otherwise, so it enables on this.
+    private let isNotchPlaced: () -> Bool
+    private let onResetPlacement: () -> Void
     private var pauseItem: NSMenuItem?
 
-    init(onToggleNotch: @escaping () -> Bool) {
+    init(onToggleNotch: @escaping () -> Bool,
+         isNotchPlaced: @escaping () -> Bool,
+         onResetPlacement: @escaping () -> Void) {
         self.onToggleNotch = onToggleNotch
+        self.isNotchPlaced = isNotchPlaced
+        self.onResetPlacement = onResetPlacement
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -34,6 +42,14 @@ final class StatusBarController: NSObject {
         pauseItem.target = self
         menu.addItem(pauseItem)
         self.pauseItem = pauseItem
+
+        let resetPlacementItem = NSMenuItem(
+            title: String(localized: "menu.resetPlacement", defaultValue: "Notch zurück nach oben"),
+            action: #selector(resetPlacement),
+            keyEquivalent: ""
+        )
+        resetPlacementItem.target = self
+        menu.addItem(resetPlacementItem)
 
         menu.addItem(.separator())
 
@@ -79,6 +95,17 @@ final class StatusBarController: NSObject {
 
     @objc private func toggleNotch() {
         setNotchPaused(onToggleNotch())
+    }
+
+    @objc private func resetPlacement() {
+        onResetPlacement()
+    }
+
+    /// The menu auto-enables its items through this: only the reset item has
+    /// anything to say, and only while the island is off its home pose.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(resetPlacement) else { return true }
+        return isNotchPlaced()
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {

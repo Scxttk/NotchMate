@@ -535,12 +535,50 @@ enum ArtworkColor {
         // the closure captures the finished stage-one assignment, so a row
         // costs one vote pass, not a re-analysis.
         return CoverBarPalette { count in
-            (0..<count).map { index in
+            let elected = (0..<count).map { index -> Color in
                 let x0 = geometry.x0 + index * geometry.usableX / count
                 let x1 = max(x0 + 1, geometry.x0 + (index + 1) * geometry.usableX / count)
-                let color = barColor(x0: x0, x1: min(x1, geometry.x1), y0: geometry.y0, y1: geometry.y1)
-                return CoverBarPalette.Bar(color: color)
+                return barColor(x0: x0, x1: min(x1, geometry.x1), y0: geometry.y0, y1: geometry.y1)
             }
+            return oneFamily(elected).map { CoverBarPalette.Bar(color: $0) }
+        }
+    }
+
+    /// How far a bar's hue may sit from the run's own, as a fraction of the hue
+    /// circle. 20° is enough for a second colour family to read as a lean and
+    /// not enough for it to read as a different colour.
+    private static let maximumBarHueDeviation: CGFloat = 20.0 / 360
+
+    /// Pulls a row's hues into a single colour family.
+    ///
+    /// The per-slice election is honest about the sleeve and wrong about the
+    /// wave. A cover whose colours sit on opposite sides of the artwork elects
+    /// one hue for every bar left of centre and another for every bar right of
+    /// it, and the run draws as two blocks of colour meeting at a seam down the
+    /// middle. Apple's wave never does that: a run is one material, and the
+    /// sleeve shows up as its colour, not as a diagram of where that colour sits.
+    ///
+    /// So the hue the most bars elected sets the family, and every other bar may
+    /// lean toward what it elected by `maximumBarHueDeviation`, no more.
+    /// Saturation and brightness are left exactly as elected — that per-slice
+    /// variation is what still makes the run read as *this* cover.
+    private static func oneFamily(_ row: [Color]) -> [Color] {
+        guard row.count > 1 else { return row }
+        let components = row.map { HSB($0) }
+        // The winner, not the mean: the average of green and purple is a hue
+        // the sleeve does not contain anywhere.
+        var tally: [Int: Int] = [:]
+        for c in components { tally[Int((c.h * 360).rounded()), default: 0] += 1 }
+        guard let winner = tally.max(by: { ($0.value, -$0.key) < ($1.value, -$1.key) })?.key else { return row }
+        let family = CGFloat(winner) / 360
+        return components.map { c in
+            var delta = c.h - family
+            if delta > 0.5 { delta -= 1 }
+            if delta < -0.5 { delta += 1 }
+            let lean = min(maximumBarHueDeviation, max(-maximumBarHueDeviation, delta))
+            var hue = (family + lean).truncatingRemainder(dividingBy: 1)
+            if hue < 0 { hue += 1 }
+            return Color(hue: hue, saturation: c.s, brightness: c.b)
         }
     }
 

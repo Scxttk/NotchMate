@@ -49,12 +49,20 @@ struct CollapsedView: View {
             : parts.joined(separator: ", ")
     }
 
+    /// The border the pill is on. Its parts stack *along* that border, so on a
+    /// side dock the capsule stands on end: cover above wave above readout.
+    private var dock: NotchDock { viewModel.placement.dock }
+    private var isVertical: Bool { !dock.isHorizontal }
+
     var body: some View {
         let tints = self.tints
-        // Spacings/paddings here must stay in lock-step with the width estimate
+        // Spacings/paddings here must stay in lock-step with the length estimate
         // in `NotchViewModel.collapsedWidth`, or the pill clips against the
         // silhouette — so both sides read from the same `NotchLayout` constants.
-        return HStack(spacing: NotchLayout.collapsedItemSpacing) {
+        // That estimate is axis-free: it measures the run of content along the
+        // border, which is the same list of parts either way round.
+        return AxisStack(axis: isVertical ? .vertical : .horizontal,
+                         spacing: NotchLayout.collapsedItemSpacing) {
             if hasAudioHero {
                 if settings.pillSpectrumOnly {
                     // Spectrum-only mode: no thumbnail at all (neither cover
@@ -85,9 +93,10 @@ struct CollapsedView: View {
                             count: wave.barCount,
                             maxHeight: wave.waveHeight,
                             barWidth: wave.barWidth,
-                            spacing: wave.spacing
+                            spacing: wave.spacing,
+                            axis: isVertical ? .vertical : .horizontal
                         )
-                        .frame(width: wave.runWidth, height: wave.frameHeight)
+                        .frame(width: waveFieldSize(wave).width, height: waveFieldSize(wave).height)
                         .transition(.opacity.combined(with: .scale(scale: 0.85)))
                     }
                 } else if tints.fromCover, let url = nowPlaying.track?.artworkURL {
@@ -137,9 +146,13 @@ struct CollapsedView: View {
                         count: NotchLayout.collapsedWaveBarCount,
                         maxHeight: NotchLayout.collapsedWaveMaxHeight,
                         barWidth: NotchLayout.collapsedWaveBarWidth,
-                        spacing: NotchLayout.collapsedWaveSpacing
+                        spacing: NotchLayout.collapsedWaveSpacing,
+                        axis: isVertical ? .vertical : .horizontal
                     )
-                    .frame(width: NotchLayout.collapsedWavesWidth, height: NotchLayout.collapsedArtworkWidth)
+                    .frame(width: dock.size(length: NotchLayout.collapsedWavesWidth,
+                                            thickness: NotchLayout.collapsedArtworkWidth).width,
+                           height: dock.size(length: NotchLayout.collapsedWavesWidth,
+                                             thickness: NotchLayout.collapsedArtworkWidth).height)
                     .transition(.opacity)
                 }
             } else if pomodoro.pillText == nil {
@@ -157,20 +170,29 @@ struct CollapsedView: View {
             // idle glyph above rather than crowding it).
             if let readout = pomodoro.pillText {
                 timerSegment(readout)
+                    .modifier(AlongBorder(vertical: isVertical,
+                                          length: NotchViewModel.timerSegmentWidth(readout),
+                                          thickness: viewModel.collapsedHeight))
             }
 
             if !shelf.items.isEmpty {
                 Label("\(shelf.items.count)", systemImage: "tray.full.fill")
                     .labelStyle(.titleAndIcon)
                     .font(.system(size: NotchLayout.collapsedBadgeFontSize, weight: .semibold))
+                    .modifier(AlongBorder(vertical: isVertical, length: NotchLayout.collapsedBadgeWidth,
+                                          thickness: viewModel.collapsedHeight))
             }
         }
-        .padding(.horizontal, NotchLayout.collapsedContentPadding)
-        // Pin the pill row to a fixed top band. Without this the row is
-        // vertically centered in the *animated* island frame during the morph,
-        // so the glyph starts mid-island and drifts up — the diagonal flight.
-        .frame(height: viewModel.collapsedHeight)
-        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(isVertical ? .vertical : .horizontal, NotchLayout.collapsedContentPadding)
+        // Pin the pill's run to a fixed band against its border. Without this
+        // the row is centred in the *animated* island frame during the morph,
+        // so the glyph starts mid-island and drifts into place — the diagonal
+        // flight the hard-cut handover exists to avoid.
+        .frame(width: isVertical ? viewModel.collapsedHeight : nil,
+               height: isVertical ? nil : viewModel.collapsedHeight)
+        .frame(maxWidth: isVertical ? .infinity : nil,
+               maxHeight: isVertical ? nil : .infinity,
+               alignment: bandAlignment)
         // The spectrum-only toggle and its sliders swap the hero's layout in
         // place; a scoped value animation can't interfere with the staged
         // expand/collapse walk's explicit withAnimation calls.
@@ -179,6 +201,24 @@ struct CollapsedView: View {
         // One element, one sentence — see `spokenSummary`.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenSummary)
+    }
+
+    /// Which end of the island the pill's run is pinned to — always the docked
+    /// border, so the collapsed glyph and the tab strip's glyph land on the
+    /// same spot.
+    private var bandAlignment: Alignment {
+        switch dock {
+        case .top: return .top
+        case .bottom: return .bottom
+        case .leading: return .leading
+        case .trailing: return .trailing
+        }
+    }
+
+    /// The field a pill wave gets: its run along the border, its deflection
+    /// across it.
+    private func waveFieldSize(_ wave: NotchLayout.PillSpectrumGeometry) -> CGSize {
+        dock.size(length: wave.runWidth, thickness: wave.frameHeight)
     }
 
     /// The passive focus-timer readout. Sizes must stay in lock-step with the

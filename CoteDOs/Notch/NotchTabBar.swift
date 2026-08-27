@@ -35,17 +35,27 @@ struct NotchTabBar: View {
     /// pill height on the way past — a row that is about to be a pill, not an
     /// interface. Only an open island is wide and tall enough to dress.
     let isOpen: Bool
+    /// The border the island is on. The strip runs along it — a row at the top
+    /// or bottom, a column standing against a side — and every slot turns with
+    /// it. The glyphs themselves never rotate: a sideways `radio.fill` reads as
+    /// a rendering fault, not as a vertical tab bar.
+    var dock: NotchDock = .top
     /// Observed so the bar re-renders live when tabs are toggled in Settings.
     @ObservedObject private var settings = UserSettings.shared
     /// Ties the one selection capsule to whichever tab's slot it is standing in.
     @Namespace private var selectionGeometry
 
     var body: some View {
-        HStack(spacing: NotchLayout.tabBarSpacing) {
+        AxisStack(axis: dock.isHorizontal ? .horizontal : .vertical,
+                  spacing: NotchLayout.tabBarSpacing) {
             ForEach(NotchViewModel.enabledTabs, id: \.self) { value in
                 tab(value)
             }
         }
+        // The row travels on its own clock, not the capsule's: shedding the
+        // other tabs re-centres the surviving glyph, and that move is what the
+        // pill handover waits for. See `NotchLayout.tabCondenseAnimation`.
+        .animation(NotchLayout.tabCondenseAnimation, value: showsAllTabs)
         .background {
             // One capsule for the row, borrowing the selected tab's slot —
             // not a capsule per tab. Per-tab capsules can only ever cross-fade,
@@ -80,9 +90,9 @@ struct NotchTabBar: View {
                 // Every icon renders itself, always — switching tabs must only
                 // change the highlight, never replace or move the icon view, or
                 // it visibly pops back in.
+                let slot = NotchLayout.tabItemSize(on: dock)
                 TabIcon(tab: value)
-                    .frame(width: NotchLayout.tabItemWidth,
-                           height: NotchLayout.tabItemHeight)
+                    .frame(width: slot.width, height: slot.height)
                     // Publishes this slot for the capsule to borrow. Every item
                     // holds the same frame, selected or not, so the capsule
                     // arriving cannot move the row it is arriving in.

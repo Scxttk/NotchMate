@@ -181,6 +181,12 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Côte d'OS" } }
       }
     },
+    "menu.resetPlacement" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Notch zurück nach oben" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move Notch Back to the Top" } }
+      }
+    },
     "menu.settings" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Einstellungen …" } },
@@ -217,6 +223,18 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Appearance" } }
       }
     },
+    "settings.audioRoute" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Audio-Ausgabe-Wechsel (AirPods, Lautsprecher)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Audio output changes (AirPods, speakers)" } }
+      }
+    },
+    "settings.audioRoute.hint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "macOS zeigt beim Verbinden von AirPods eine eigene Einblendung. Schalte den Ausgabe-Wechsel ab, wenn du sie nicht doppelt sehen willst." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "macOS shows its own banner when AirPods connect. Switch output changes off if you'd rather not see it twice." } }
+      }
+    },
     "settings.data" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Daten" } },
@@ -243,8 +261,8 @@
     },
     "settings.liveActivities" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Live Activities (Laden, AirPods, Datei empfangen)" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Live activities (charging, AirPods, file received)" } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Live Activities (Laden, Datei empfangen)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Live activities (charging, file received)" } }
       }
     },
     "settings.mediaSource" : {
@@ -269,6 +287,18 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Anzeige" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Display" } }
+      }
+    },
+    "settings.notch.placement" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Position" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Position" } }
+      }
+    },
+    "settings.notch.resetPlacement" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Notch mittig nach oben" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move Notch Back to the Top" } }
       }
     },
     "settings.nowPlaying" : {

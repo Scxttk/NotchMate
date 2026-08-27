@@ -119,6 +119,37 @@ final class NotchViewModel: ObservableObject {
 
     private static let selectedTabKey = "selectedTab"
 
+    /// Which screen border the island is parked on, remembered across launches.
+    ///
+    /// State rather than pure geometry, so it lives here: the view reads the
+    /// edge to know which way the island grows when it opens, and the
+    /// controller reads it for every rect that reacts to the cursor.
+    /// `NotchWindowController` owns all the writes — it is the one that knows
+    /// which screen the placement has to fit on.
+    @Published var placement: NotchPlacement = NotchViewModel.restoredPlacement {
+        didSet {
+            guard placement != oldValue else { return }
+            UserDefaults.standard.set(placement.dock.rawValue, forKey: Self.dockKey)
+            UserDefaults.standard.set(placement.anchor.rawValue, forKey: Self.dockAnchorKey)
+            UserDefaults.standard.set(Double(placement.along), forKey: Self.dockAlongKey)
+        }
+    }
+
+    private static let dockKey = "notchDock"
+    private static let dockAnchorKey = "notchDockAnchor"
+    private static let dockAlongKey = "notchDockOffset"
+
+    private static var restoredPlacement: NotchPlacement {
+        guard let raw = UserDefaults.standard.string(forKey: dockKey),
+              let dock = NotchDock(rawValue: raw) else { return .home }
+        // An install from before corners existed has no anchor stored; it was
+        // positioned by `along` alone, which is exactly `.centre`.
+        let anchor = UserDefaults.standard.string(forKey: dockAnchorKey)
+            .flatMap(NotchPlacement.Anchor.init(rawValue:)) ?? .centre
+        return NotchPlacement(dock: dock, anchor: anchor,
+                              along: CGFloat(UserDefaults.standard.double(forKey: dockAlongKey)))
+    }
+
     /// The last tab, if it is still one the user offers. Falls back to the
     /// first enabled tab rather than to `.music`, which may itself be switched
     /// off in Settings.
@@ -190,9 +221,26 @@ final class NotchViewModel: ObservableObject {
     /// and the extra height is the bars' travel. Single source for the
     /// silhouette, the hit/hover rects and the content rows' pinning, so the
     /// pill can't end up taller than the area that reacts to it.
+    /// The pill's thickness — its extent *away* from the border it is on, so
+    /// the height of a pill at the top and the width of one at the side. Named
+    /// for the old top-only world; every axis-aware caller goes through
+    /// `collapsedIslandSize` instead.
     var collapsedHeight: CGFloat { NotchLayout.currentCollapsedHeight }
-    var expandedWidth: CGFloat { NotchLayout.expandedWidth }
-    var expandedHeight: CGFloat { NotchLayout.expandedHeight }
+    var expandedWidth: CGFloat { NotchLayout.expandedSize(on: placement.dock).width }
+    var expandedHeight: CGFloat { NotchLayout.expandedSize(on: placement.dock).height }
+
+    /// The open island's size on the border it is currently parked on.
+    var expandedIslandSize: CGSize { NotchLayout.expandedSize(on: placement.dock) }
+
+    /// The collapsed pill's size on the border it is currently parked on: the
+    /// content-driven length runs along the border, the fixed thickness across
+    /// it. On a side border that is a capsule standing on end.
+    func collapsedIslandSize(isPlaying: Bool, hasItems: Bool, timerText: String?) -> CGSize {
+        placement.dock.size(
+            length: collapsedWidth(isPlaying: isPlaying, hasItems: hasItems, timerText: timerText),
+            thickness: collapsedHeight
+        )
+    }
 
     /// Collapsed pill width, computed to hug whatever the pill actually shows.
     /// Depends on playback (artwork + visualizer are wider than the idle
@@ -247,29 +295,28 @@ final class NotchViewModel: ObservableObject {
 
     /// Estimated width of the pill's timer segment (icon + readout). Must stay
     /// in lock-step with the segment layout in `CollapsedView`.
-    private static func timerSegmentWidth(_ text: String) -> CGFloat {
+    static func timerSegmentWidth(_ text: String) -> CGFloat {
         NotchLayout.collapsedTimerIconWidth + NotchLayout.collapsedTimerInnerSpacing
             + CGFloat(text.count) * NotchLayout.collapsedTimerCharWidth
     }
 
-    /// Width of the intermediate `.solo` capsule. The icon is pinned at the
-    /// capsule *centre* (its final pill position) with the label trailing to
-    /// the right, so collapsing on further only fades the label and shrinks the
-    /// capsule — the icon never moves. Keeping the icon centred means the label
-    /// width is mirrored as empty space on the left, hence the label counts
-    /// twice. The estimate errs generous; slight looseness is harmless,
-    /// clipping is not.
-    /// Width of the `.solo` capsule: the same for every tab now that the row is
-    /// icon-only. It used to be the base plus *twice* the title's width — twice,
-    /// because an invisible mirror of the label sat left of the icon to keep it
-    /// centred. No label, no mirror, no per-tab width, and the capsule lands
-    /// much closer to the pill it is handing over to.
-    func soloWidth(for tab: Tab) -> CGFloat {
-        NotchLayout.soloBaseWidth
-    }
+    /// Width of the intermediate `.solo` capsule — the same for every tab now
+    /// that the row is icon-only. It used to be the base plus *twice* the
+    /// title's width (twice, because an invisible mirror of the label sat left
+    /// of the icon to keep it centred), which is why it used to be asked per
+    /// tab. No label, no mirror, no per-tab width, and the capsule lands much
+    /// closer to the pill it is handing over to.
+    var soloWidth: CGFloat { NotchLayout.soloBaseWidth }
 
-    // The panel keeps a constant size; only the SwiftUI island animates.
-    // Extra margin leaves room for the island's shadow.
-    var panelWidth: CGFloat { expandedWidth + NotchLayout.panelHorizontalMargin }
-    var panelHeight: CGFloat { expandedHeight + NotchLayout.panelVerticalMargin }
+    // The panel keeps a constant size *per border*; only the SwiftUI island
+    // animates inside it. Extra margin leaves room for the island's shadow —
+    // the generous one along the border, the tight one across it, since the
+    // edge itself clips that side's shadow anyway.
+    var panelSize: CGSize {
+        let (length, thickness) = placement.dock.lengthAndThickness(of: expandedIslandSize)
+        return placement.dock.size(length: length + NotchLayout.panelHorizontalMargin,
+                                   thickness: thickness + NotchLayout.panelVerticalMargin)
+    }
+    var panelWidth: CGFloat { panelSize.width }
+    var panelHeight: CGFloat { panelSize.height }
 }

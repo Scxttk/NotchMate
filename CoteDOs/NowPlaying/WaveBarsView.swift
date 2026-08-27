@@ -143,6 +143,14 @@ struct WaveCanvas: View, Animatable {
     /// making the motion itself jittery. Resizing is animated one level up
     /// instead, as a transform (see `WaveBarsView.morphScale`).
     let metrics: WaveMetrics
+    /// Which way the run reads. `.horizontal` is the wave everywhere it has
+    /// ever been: bars side by side, growing up and down from a centre line.
+    /// `.vertical` turns that a quarter turn for an island standing on a side
+    /// border — bars stacked down the run, growing left and right. A transposed
+    /// draw rather than a rotated view: rotating would carry the gradient's
+    /// measured top-to-foot drain around with it, and that drain is depth, not
+    /// direction — it must keep pointing away from the bar's tip.
+    var axis: Axis = .horizontal
 
     var animatableData: BarLevels {
         get { levels }
@@ -155,14 +163,20 @@ struct WaveCanvas: View, Animatable {
             guard total > 0 else { return }
             let barWidth = max(0, metrics.barWidth)
             let spacing = max(0, metrics.spacing)
-            let runWidth = CGFloat(total) * barWidth + CGFloat(total - 1) * spacing
-            var x = (size.width - runWidth) / 2
+            let runLength = CGFloat(total) * barWidth + CGFloat(total - 1) * spacing
+            // `along` walks the run; `length` is the one bar's deflection. The
+            // two map onto x/y one way or the other — everything else about a
+            // bar is the same in both.
+            let vertical = axis == .vertical
+            var along = ((vertical ? size.height : size.width) - runLength) / 2
             for i in 0..<total {
                 let level = max(0, min(1, levels.values[i]))
-                let height = max(metrics.floorHeight, metrics.maxHeight * level * Self.envelope(at: i, total: total))
-                let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
-                draw(&context, rect: rect, level: level, ink: inks[i])
-                x += barWidth + spacing
+                let length = max(metrics.floorHeight, metrics.maxHeight * level * Self.envelope(at: i, total: total))
+                let rect = vertical
+                    ? CGRect(x: (size.width - length) / 2, y: along, width: length, height: barWidth)
+                    : CGRect(x: along, y: (size.height - length) / 2, width: barWidth, height: length)
+                draw(&context, rect: rect, vertical: vertical, ink: inks[i])
+                along += barWidth + spacing
             }
         }
     }
@@ -191,10 +205,6 @@ struct WaveCanvas: View, Animatable {
         return floor + (1 - floor) * pow(sin(.pi * t), exponent)
     }
 
-    /// Ceiling for the per-bar glow. Reached only well beyond page size — the
-    /// pill's widest bar glows at ~6 pt, the page's at ~13 pt.
-    private static let maximumGlowRadius: CGFloat = 16
-
     /// Tallest bar the measured foot drain applies to in full.
     ///
     /// The drain is a *proportional* gradient — top colour to a desaturated,
@@ -220,37 +230,31 @@ struct WaveCanvas: View, Animatable {
         return ink.baseHSB.mixed(to: ink.footHSB, t: Double(drain)).color
     }
 
-    private func draw(_ context: inout GraphicsContext, rect: CGRect, level: CGFloat, ink: BarInk) {
-        let capsule = Path(roundedRect: rect, cornerRadius: rect.width / 2)
+    private func draw(_ context: inout GraphicsContext, rect: CGRect, vertical: Bool, ink: BarInk) {
+        // Round on the bar's thin side, whichever that is — a vertical run's
+        // bars are wide and short, and halving their width would swallow them.
+        let capsule = Path(roundedRect: rect, cornerRadius: min(rect.width, rect.height) / 2)
 
-        // Every bar throws its own light, and louder bands glow harder. On the
-        // pure black island this halo is what makes the wave read as alive
-        // rather than printed on.
+        // No halo. Every bar used to throw its own light, scaled by its level,
+        // on the theory that it made the wave read as alive rather than printed
+        // on. Measured against the reference it does the opposite: the island's
+        // bars have no glow at all, and ours turned the pure black around the
+        // run milky grey, which is most of what made the colours look dirty.
         //
-        // A bar's *colour* does not change with its level. Driving a peaking
-        // tip 60% toward white ("incandescence") is the obvious thing to try and
-        // it is wrong: the Dynamic Island's bars hold their colour and only their
-        // height and glow move, and side by side the white tips were the last
-        // thing here that still read as un-Apple.
-        var layer = context
-        // Glow radius scales with the bar's own width: a fixed 1–4.5 pt halo
-        // was sized for 3 pt panel bars and swallowed the 2 pt pill bars whole,
-        // bleeding into their neighbours and flattening the wave's shape.
-        //
-        // Capped in absolute terms because the same wave now also runs
-        // fullscreen, where bars are ~100 pt wide: a blur radius that kept
-        // scaling would be a ~100 pt gaussian on every bar of every frame, which
-        // is a lot of pixels to throw away on a halo nobody can see the edge of.
-        // The cap is far above anything the pill or the page reaches, so their
-        // look is untouched.
-        let glow = min(Self.maximumGlowRadius, rect.width * (0.4 + 0.9 * level))
-        layer.addFilter(.shadow(color: ink.base.opacity(0.35 + 0.45 * level), radius: glow))
-        layer.fill(
+        // A bar's *colour* does not change with its level either. Driving a
+        // peaking tip 60% toward white ("incandescence") is the obvious thing to
+        // try and it is wrong: the Dynamic Island's bars hold their colour and
+        // only their height moves.
+        // The drain runs the bar's *length* — the direction it deflects in —
+        // so on a vertical run it crosses the bar left to right, and it is the
+        // length (not a fixed axis) that decides how far the foot is held back.
+        let barLength = vertical ? rect.width : rect.height
+        context.fill(
             capsule,
             with: .linearGradient(
-                Gradient(colors: [ink.base, Self.foot(of: ink, barHeight: rect.height)]),
-                startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                endPoint: CGPoint(x: rect.midX, y: rect.maxY)
+                Gradient(colors: [ink.base, Self.foot(of: ink, barHeight: barLength)]),
+                startPoint: vertical ? CGPoint(x: rect.minX, y: rect.midY) : CGPoint(x: rect.midX, y: rect.minY),
+                endPoint: vertical ? CGPoint(x: rect.maxX, y: rect.midY) : CGPoint(x: rect.midX, y: rect.maxY)
             )
         )
     }
@@ -283,6 +287,10 @@ struct WaveBarsView: View {
     /// run's *offset* with, or the wave arrives at its destination before (or
     /// after) it finishes growing — the two halves of one movement.
     var morphAnimation: Animation = NotchLayout.islandMorphAnimation
+    /// Which way the run reads — see `WaveCanvas.axis`. `maxHeight`, `barWidth`
+    /// and the rest keep their names in both: they are the bar's deflection and
+    /// its thickness, whichever screen axis those land on.
+    var axis: Axis = .horizontal
     /// Decides whether the bars ease between updates — see the `body` comment.
     @ObservedObject private var power = PowerSource.shared
 
@@ -344,7 +352,7 @@ struct WaveBarsView: View {
     }
 
     private func wave(levels: [CGFloat], inks: [BarInk]) -> WaveCanvas {
-        WaveCanvas(levels: BarLevels(values: levels), inks: inks, metrics: metrics)
+        WaveCanvas(levels: BarLevels(values: levels), inks: inks, metrics: metrics, axis: axis)
     }
 
     var body: some View {
@@ -388,7 +396,9 @@ struct WaveBarsView: View {
             // geometry it cannot be restarted by this levels ease, which is what
             // kept the morph from ever being visible.
             wave(levels: values, inks: palette(total: values.count))
-                .frame(maxHeight: .infinity, alignment: .center)
+                .frame(maxWidth: axis == .vertical ? .infinity : nil,
+                       maxHeight: axis == .horizontal ? .infinity : nil,
+                       alignment: .center)
                 .animation(power.isOnBattery ? nil : .easeOut(duration: 0.09), value: values)
         } else {
             // Hoisted out of the timeline closure on purpose: the colours don't
@@ -400,7 +410,9 @@ struct WaveBarsView: View {
                 // The timeline already supplies a new value per frame, so this
                 // branch needs no animation of its own.
                 wave(levels: (0..<count).map { proceduralLevel(index: $0, time: time) }, inks: inks)
-                    .frame(maxHeight: .infinity, alignment: .center)
+                    .frame(maxWidth: axis == .vertical ? .infinity : nil,
+                       maxHeight: axis == .horizontal ? .infinity : nil,
+                       alignment: .center)
             }
         }
     }

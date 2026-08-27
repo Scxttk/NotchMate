@@ -79,4 +79,28 @@ final class SpectrumBeatTests: XCTestCase {
         XCTAssertLessThanOrEqual(levels.max() ?? 0, 0.05,
             "silent input must not produce visible bars (got \(levels))")
     }
+
+    /// The other way a wave can outlive its music: not a bad mapping, but a tap
+    /// that dies while `hasSignal` is still held. `hasSignal` and `bands` are
+    /// only ever written from the audio callback, so quitting the player
+    /// mid-song used to freeze the last frame on screen indefinitely — the pill
+    /// stayed open over motionless bars with nothing playing.
+    func testLosingTheTapMidSignalClearsTheWave() {
+        let analyzer = SpectrumAnalyzer(bandCount: 16)
+        analyzer.publishForTesting([Float](repeating: 0.8, count: 16))
+        XCTAssertTrue(analyzer.hasSignal, "precondition: a signal is being held")
+        XCTAssertGreaterThan(analyzer.bands.values.max() ?? 0, 0, "precondition: bars are up")
+
+        analyzer.resetPublishedSignalForTesting()
+
+        // The reset publishes on the main queue; FIFO ordering means this block
+        // is enqueued behind it and only runs once it has.
+        let published = expectation(description: "reset reached the UI")
+        DispatchQueue.main.async { published.fulfill() }
+        wait(for: [published], timeout: 1)
+
+        XCTAssertFalse(analyzer.hasSignal, "a lost tap must not keep holding the signal open")
+        XCTAssertEqual(analyzer.bands.values.max() ?? 0, 0,
+            "a lost tap must not leave its last frame frozen (got \(analyzer.bands.values))")
+    }
 }
